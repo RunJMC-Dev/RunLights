@@ -19,6 +19,7 @@ sys.path.insert(0, str(_here / "src"))
 from runlights.tray import serve_in_thread  # noqa: E402
 from runlights.ipc import PIPE_NAME  # noqa: E402
 from runlights.config import load_config, ConfigError  # noqa: E402
+from runlights import wled  # noqa: E402
 
 try:
     import pystray  # type: ignore
@@ -187,6 +188,31 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
         elif cmd == "show controllers":
             result = _format_controllers(cfg_raw_global) if cfg_raw_global else "(no config loaded)"
             append_line(result)
+        elif cmd.startswith("testoutput "):
+            if not cfg_raw_global:
+                append_line("No config loaded")
+                return
+            parts = cmd.split()
+            if len(parts) != 3 or "." not in parts[1]:
+                append_line("Usage: testoutput <app>.<mode> <value>")
+                return
+            app_mode = parts[1]
+            raw_val = parts[2]
+            app_id, mode_id = app_mode.split(".", 1)
+            mode = _lookup_mode(cfg_raw_global, app_id, mode_id)
+            if not mode:
+                append_line(f"Mode {app_id}.{mode_id} not found")
+                return
+            # segmentsolid expects a binding name; others expect numeric.
+            if mode.get("output") == "segmentsolid":
+                val = raw_val
+            else:
+                try:
+                    val = float(raw_val)
+                except Exception:
+                    append_line("Usage: testoutput <app>.<mode> <value>")
+                    return
+            _apply_output(mode, cfg_raw_global, val, append_line)
         else:
             append_line(f"Unknown command: {cmd}")
 
@@ -250,6 +276,101 @@ def _format_controllers(cfg_raw: dict) -> str:
         segs = ctrl.get("segments", [])
         lines.append(f"- {cid} @ {host} ({len(segs)} segments)")
     return "\n".join(lines) if lines else "(no controllers)"
+
+
+def _lookup_controller(cfg_raw: dict, controller_id: str) -> dict | None:
+    for ctrl in cfg_raw.get("controllers", []):
+        if ctrl.get("id") == controller_id:
+            return ctrl
+    return None
+
+
+def _lookup_mode(cfg_raw: dict, app_id: str, mode_id: str) -> dict | None:
+    for app in cfg_raw.get("application", []):
+        if app.get("id") != app_id:
+            continue
+        for mode in app.get("modes", []):
+            if mode.get("id") == mode_id:
+                return mode
+    return None
+
+
+def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
+    output_type = mode.get("output")
+    color = mode.get("color", "#ffffff")
+    transition = cfg_raw.get("default_transition_ms")
+
+    if output_type == "fullfade":
+        controller_id = mode.get("controller")
+        ctrl = _lookup_controller(cfg_raw, controller_id) if controller_id else None
+        if not ctrl:
+            log_message(f"Controller {controller_id} not found")
+            return
+        host = ctrl.get("host")
+        port = int(ctrl.get("port", 80))
+        rlo = float(mode.get("rangelow", 0))
+        rhi = float(mode.get("rangehigh", 100))
+        if rhi <= rlo:
+            log_message("Invalid range for mode")
+            return
+        pct = max(0.0, min(100.0, (value - rlo) / (rhi - rlo) * 100.0))
+        try:
+            wled.apply_fullfade(host=host, port=port, color_hex=color, health_pct=pct, transition_ms=transition)
+            log_message(f"Applied {output_type} {value} -> {pct:.0f}% on {controller_id}")
+        except Exception as exc:
+            log_message(f"WLED error: {exc}")
+    elif output_type == "segmentsolid":
+        bindings = mode.get("bindings", {})
+        if not isinstance(value, str):
+            log_message("segmentsolid expects a binding name")
+            return
+        binding = bindings.get(value)
+        if not binding:
+            log_message(f"Binding '{value}' not found")
+            return
+        target_controller = binding.get("controller")
+        if not target_controller:
+            log_message("Binding missing controller")
+            return
+        acolor = mode.get("acolor", "#000000")
+        bcolor = mode.get("bcolor", "#000000")
+        try:
+            abri = int(mode.get("abrightness", 0))
+            bbri = int(mode.get("bbrightness", 0))
+        except Exception:
+            log_message("Invalid brightness values")
+            return
+        target_segment = binding.get("segment")
+        controllers_filter = mode.get("controllers", [])
+        for ctrl_entry in cfg_raw.get("controllers", []):
+            cid = ctrl_entry.get("id")
+            if controllers_filter and cid not in controllers_filter:
+                continue
+            chost = ctrl_entry.get("host")
+            cport = int(ctrl_entry.get("port", 80))
+            segments = ctrl_entry.get("segments", [])
+            if not segments:
+                continue
+            for seg in segments:
+                seg_id = seg.get("id")
+                is_target = cid == target_controller and seg_id == target_segment
+                seg_color = acolor if is_target else bcolor
+                seg_bri = abri if is_target else bbri
+                try:
+                    wled.send_simple(
+                        host=chost,
+                        port=cport,
+                        on=True,
+                        brightness=seg_bri,
+                        color=seg_color,
+                        segment=seg_id,
+                        transition_ms=mode.get("transition_ms", transition),
+                    )
+                except Exception as exc:
+                    log_message(f"WLED error on {cid} seg {seg_id}: {exc}")
+        log_message(f"Applied segmentsolid '{value}'")
+    else:
+        log_message(f"Unsupported output type: {output_type}")
 
 
 def _process_watch_loop(watch: set[str], stop_event: threading.Event, log_message):
