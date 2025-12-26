@@ -69,16 +69,12 @@ def _open_debug_window(stop_event: threading.Event):
         logging.warning("Cannot open debug window (tkinter not available): %s", exc)
         return
 
-    def on_close():
-        stop_event.set()
-        root.destroy()
-
     root = tk.Tk()
     root.title("RunLights Debug")
     root.geometry("320x200")
     tk.Label(root, text="RunLights debug view (placeholder)", font=("Segoe UI", 11)).pack(pady=8)
     tk.Label(root, text=f"IPC pipe: {PIPE_NAME}", font=("Segoe UI", 9)).pack(pady=4)
-    root.protocol("WM_DELETE_WINDOW", on_close)
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
     root.mainloop()
 
 
