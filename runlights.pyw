@@ -158,7 +158,16 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
     send_btn.pack(side="right")
 
     def append_line(line: str, preformatted: bool = False):
-        text = line if preformatted else f"[{datetime.now().strftime('%H:%M:%S')}] {line}"
+        if preformatted:
+            text = line
+            prefix_len = 0
+        else:
+            prefix = f"[{datetime.now().strftime('%H:%M:%S')}] "
+            prefix_len = len(prefix)
+            text = prefix + line
+        if "\n" in text and prefix_len:
+            indent = " " * prefix_len
+            text = text.replace("\n", "\n" + indent)
         log_box.configure(state="normal")
         log_box.insert("end", text + "\n")
         log_box.configure(state="disabled")
