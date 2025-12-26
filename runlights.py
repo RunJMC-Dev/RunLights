@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
 import time
@@ -10,6 +11,9 @@ from datetime import datetime
 
 # Allow running without installation by adjusting path.
 _here = Path(__file__).resolve().parent
+CONFIG_PATH = _here / "config.toml"
+# Ensure relative paths (config/logo) work even when double-click launched.
+os.chdir(_here)
 sys.path.insert(0, str(_here / "src"))
 
 from runlights.tray import serve_in_thread  # noqa: E402
@@ -163,13 +167,13 @@ def main() -> int:
     # Log config load once at startup.
     debug_on_start = False
     try:
-        cfg = load_config(Path("config.toml"))
+        cfg = load_config(CONFIG_PATH)
         log_queue.put(f"Config loaded: {cfg.path.resolve()}")
         debug_on_start = bool(cfg.raw.get("debug", False))
     except ConfigError as exc:
         log_queue.put(f"Config error: {exc}")
 
-    serve_in_thread(config_path=Path("config.toml"), stop_event=stop_event, log_queue=log_queue)
+    serve_in_thread(config_path=CONFIG_PATH, stop_event=stop_event, log_queue=log_queue)
     logging.info("Tray IPC started on %s", PIPE_NAME)
 
     tray_icon = start_tray_icon(stop_event, debug_request)
