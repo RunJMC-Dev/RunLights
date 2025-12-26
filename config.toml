@@ -122,16 +122,16 @@ processes = ["emulationstation.exe"]
   output = "segmentsolid"
   color = "#ff0000"
   controllers = ["PCROOMLHS", "PCROOMRHS"]
-
-    [application.modes."game-select".bindings]
-    amiga = { controller = "PCROOMLHS", segment = 1 }
-    atari = { controller = "PCROOMLHS", segment = 2 }
-    n64 = { controller = "PCROOMLHS", segment = 3 }
-    snes = { controller = "PCROOMLHS", segment = 4 }
-    nes = { controller = "PCROOMLHS", segment = 5 }
-    c64 = { controller = "PCROOMRHS", segment = 0 }
-    dreamcast = { controller = "PCROOMRHS", segment = 1 }
-    saturn = { controller = "PCROOMRHS", segment = 2 }
-    megadrive = { controller = "PCROOMRHS", segment = 3 }
-    gamegear = { controller = "PCROOMRHS", segment = 4 }
-    mastersystem = { controller = "PCROOMRHS", segment = 5 }
+  bindings = {
+    amiga = { controller = "PCROOMLHS", segment = 1 },
+    atari = { controller = "PCROOMLHS", segment = 2 },
+    n64 = { controller = "PCROOMLHS", segment = 3 },
+    snes = { controller = "PCROOMLHS", segment = 4 },
+    nes = { controller = "PCROOMLHS", segment = 5 },
+    c64 = { controller = "PCROOMRHS", segment = 0 },
+    dreamcast = { controller = "PCROOMRHS", segment = 1 },
+    saturn = { controller = "PCROOMRHS", segment = 2 },
+    megadrive = { controller = "PCROOMRHS", segment = 3 },
+    gamegear = { controller = "PCROOMRHS", segment = 4 },
+    mastersystem = { controller = "PCROOMRHS", segment = 5 },
+  }
