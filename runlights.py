@@ -71,7 +71,7 @@ def _load_icon_image():
 def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"):
     try:
         import tkinter as tk
-        from tkinter import scrolledtext
+        from tkinter import scrolledtext, ttk
         try:
             from PIL import Image, ImageTk  # type: ignore
             try:
@@ -89,6 +89,18 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
     root.title("RunLights Debug")
     root.geometry("640x480")
 
+    try:
+        style = ttk.Style()
+        for theme in ("vista", "xpnative", "clam"):
+            if theme in style.theme_names():
+                style.theme_use(theme)
+                break
+    except Exception:
+        pass
+
+    content = ttk.Frame(root, padding=8)
+    content.pack(fill="both", expand=True)
+
     if Image and ImageTk:
         logo_path = _here / "images" / "logo.png"
         if logo_path.exists():
@@ -96,16 +108,16 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
                 img = Image.open(logo_path)
                 img.thumbnail((220, 180), RESAMPLE)
                 photo = ImageTk.PhotoImage(img)
-                logo_label = tk.Label(root, image=photo)
+                logo_label = ttk.Label(content, image=photo)
                 logo_label.image = photo  # keep reference
-                logo_label.pack(pady=8)
+                logo_label.pack(pady=6)
             except Exception as exc:
                 logging.warning("Failed to load logo %s: %s", logo_path, exc)
 
-    tk.Label(root, text="RunLights debug view", font=("Segoe UI", 11)).pack(pady=4)
+    ttk.Label(content, text="RunLights debug view", font=("Segoe UI", 11)).pack(pady=2)
 
-    log_box = scrolledtext.ScrolledText(root, width=72, height=16, state="disabled", font=("Consolas", 9))
-    log_box.pack(padx=10, pady=8, fill="both", expand=True)
+    log_box = scrolledtext.ScrolledText(content, width=72, height=16, state="disabled", font=("Consolas", 9))
+    log_box.pack(padx=6, pady=6, fill="both", expand=True)
 
     def append_line(line: str):
         ts = datetime.now().strftime("%H:%M:%S")
@@ -149,9 +161,11 @@ def main() -> int:
     debug_request = threading.Event()
     log_queue: "queue.Queue[str]" = queue.Queue()
     # Log config load once at startup.
+    debug_on_start = False
     try:
         cfg = load_config(Path("config.toml"))
         log_queue.put(f"Config loaded: {cfg.path.resolve()}")
+        debug_on_start = bool(cfg.raw.get("debug", False))
     except ConfigError as exc:
         log_queue.put(f"Config error: {exc}")
 
@@ -160,11 +174,18 @@ def main() -> int:
 
     tray_icon = start_tray_icon(stop_event, debug_request)
 
+    if debug_on_start:
+        debug_request.set()
+
     try:
         while not stop_event.is_set():
             if debug_request.is_set():
                 debug_request.clear()
-                _run_debug_window(stop_event, log_queue)
+                threading.Thread(
+                    target=_run_debug_window,
+                    args=(stop_event, log_queue),
+                    daemon=True,
+                ).start()
             time.sleep(0.1)
     except KeyboardInterrupt:
         stop_event.set()
