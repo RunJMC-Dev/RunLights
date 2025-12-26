@@ -39,9 +39,8 @@ Replace the host/segment/effect labels to match your WLED setup.
 
 ## Current CLI scaffold
 - Entry point: `python runlights_cli.py <name>` (runs without installing; uses local `src/`).
-- Config: reads `./config.toml` by default; can override with `--config path/to/config.toml`.
-- Behavior today: resolves the console binding in config, then attempts IPC to the tray (not implemented yet). If the tray isn’t running, it prints the resolved binding and exits non-zero.
-- Next step: implement tray IPC (named pipe/TCP) and direct-apply fallback.
+- Behavior today: forwards the console name to the tray via IPC (not implemented yet). If the tray isn’t running, it exits non-zero with a warning.
+- Next step: implement tray IPC (named pipe/TCP) and direct-apply fallback; the tray will resolve the name using config bindings.
 
 ## Roadmap
 - Decide on Python version and dependency set.
