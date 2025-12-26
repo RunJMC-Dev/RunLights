@@ -10,24 +10,18 @@ from .ipc import IPCNotReady, send_console_request
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="runlights-cli", description="RunLights command-line interface")
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    console_parser = subparsers.add_parser("console", help="Send console name (from ESDE) to the tray")
-    console_parser.add_argument("name", help="Console name (e.g., snes, megadrive)")
-
-    console_parser.add_argument(
+    parser.add_argument("name", help="Console name (e.g., snes, megadrive)")
+    parser.add_argument(
         "--config",
         type=Path,
         default=Path("config.toml"),
         help="Path to config.toml (defaults to ./config.toml)",
     )
-
-    console_parser.add_argument(
+    parser.add_argument(
         "--direct",
         action="store_true",
         help="(future) Apply directly without tray IPC if tray is unavailable",
     )
-
     return parser
 
 
@@ -62,13 +56,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command == "console":
-        return handle_console(args)
-
-    parser.print_help()
-    return 1
+    return handle_console(args)
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

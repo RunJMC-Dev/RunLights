@@ -33,12 +33,12 @@ runlights --host 192.168.1.50 segments set --name "shelf" --effect "highlight" -
 Replace the host/segment/effect labels to match your WLED setup.
 
 ## ESDE integration (planned)
-- ESDE will call a minimal CLI: `runlights-cli console <name>` (e.g., `runlights-cli console snes`).
+- ESDE will call a minimal CLI: `python runlights_cli.py <name>` (e.g., `python runlights_cli.py snes`).
 - The CLI hands the console name to the tray process via IPC; the tray resolves it using the ESDE bindings in `config.toml` and applies actions/presets with transitions.
 - Only `/scripts/game-select` is needed; `/scripts/startup` and `/scripts/quit` can be dropped because process detection will handle ESDE lifecycle.
 
 ## Current CLI scaffold
-- Entry point: `python runlights_cli.py console <name>` (runs without installing; uses local `src/`).
+- Entry point: `python runlights_cli.py <name>` (runs without installing; uses local `src/`).
 - Config: reads `./config.toml` by default; can override with `--config path/to/config.toml`.
 - Behavior today: resolves the console binding in config, then attempts IPC to the tray (not implemented yet). If the tray isn’t running, it prints the resolved binding and exits non-zero.
 - Next step: implement tray IPC (named pipe/TCP) and direct-apply fallback.
