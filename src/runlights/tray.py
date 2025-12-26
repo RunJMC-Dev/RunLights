@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 from queue import Queue
@@ -21,16 +22,24 @@ log = logging.getLogger("runlights.tray")
 
 
 def _create_pipe():
-    return win32pipe.CreateNamedPipe(
-        PIPE_NAME,
-        win32pipe.PIPE_ACCESS_DUPLEX,
-        win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
-        1,  # max instances
-        65536,
-        65536,
-        0,
-        None,
-    )
+    """Create a named pipe, retrying if instances are temporarily busy."""
+    while True:
+        try:
+            return win32pipe.CreateNamedPipe(
+                PIPE_NAME,
+                win32pipe.PIPE_ACCESS_DUPLEX,
+                win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
+                4,  # allow a few concurrent instances
+                65536,
+                65536,
+                0,
+                None,
+            )
+        except pywintypes.error as exc:
+            if exc.winerror == 231:  # all pipe instances are busy
+                time.sleep(0.1)
+                continue
+            raise
 
 
 def serve(
