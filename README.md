@@ -38,9 +38,8 @@ _Setup details are TBD; fill in once Python version and packaging are chosen (pi
 
 ## Tray IPC (Windows)
 - IPC uses a Windows named pipe: `\\.\pipe\runlights_ipc` (requires `pywin32`).
-- Run the tray server: `python runlights_tray.py [--debug] [--no-tray]` (reads `config.toml` from the working directory).
-- Tray icon (optional): requires `pystray` and `Pillow`; disable with `--no-tray` if not installed.
-- Debug window (optional): `--debug` opens a simple Tk window (placeholder for future debug UI).
+- Run the tray: `python runlights.py` (reads `config.toml` from the working directory); no command-line arguments are used. This will later be packaged as an auto-starting exe.
+- Tray icon: uses a bundled `icon.ico` in the app folder (hard-coded fallback shape if missing); requires `pystray` and `Pillow`.
 - The CLI connects to the pipe and sends a JSON message: `{"type":"console","name":"<your console>"}`.
 
 ## Roadmap
