@@ -74,6 +74,10 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
         from tkinter import scrolledtext
         try:
             from PIL import Image, ImageTk  # type: ignore
+            try:
+                RESAMPLE = Image.Resampling.LANCZOS  # Pillow >= 10
+            except Exception:
+                RESAMPLE = Image.ANTIALIAS  # Pillow < 10
         except Exception:
             Image = None  # type: ignore
             ImageTk = None  # type: ignore
@@ -90,7 +94,7 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
         if logo_path.exists():
             try:
                 img = Image.open(logo_path)
-                img.thumbnail((220, 180), Image.ANTIALIAS)
+                img.thumbnail((220, 180), RESAMPLE)
                 photo = ImageTk.PhotoImage(img)
                 logo_label = tk.Label(root, image=photo)
                 logo_label.image = photo  # keep reference
