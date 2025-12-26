@@ -13,32 +13,32 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - **CLI**: Mirrors core actions for scripting/automation.
 
 ## Quick start
-_Setup details are TBD; fill in once Python version and packaging are chosen (pip/Poetry, venv, etc.)._
 1. Clone: `git clone https://github.com/RunJMC-Dev/RunLights.git`
-2. Create/activate a virtual environment (recommended).
-3. Install dependencies once defined (e.g., `pip install -r requirements.txt`).
-4. Run the GUI or CLI entrypoint (to be added).
+2. Create/activate a virtual environment.
+3. Install deps: `pip install -r requirements.txt` (pywin32, psutil, requests, pystray, Pillow).
+4. Copy `config.example.toml` to `config.toml` in the app folder and edit.
+5. Launch tray (no console): double-click `runlights.pyw` (or `pythonw runlights.pyw`). It applies the idle state on start and watches configured processes.
 
 ## Configuration (TOML)
 - Copy `config.example.toml` to `config.toml` in the app folder (keep it beside the app so it moves with it) and edit.
-- Uses REST with transitions; default update interval is `500ms` and can be tweaked per config.
+- Uses WLED REST with transitions; default update interval is `500ms` and can be tweaked per config.
 - Controllers use an `id` for references (no spaces) plus an optional human-friendly `name`; define static IPs and segments.
-- Modes are keyed off process names; can include startup presets, steady states, shortcuts, and optional screen-region input parameters (for games like Quake).
-- ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` so `runlights_cli.py <name>` can hand off to the tray.
+- Modes are keyed off process names; can include screen-region inputs, range mapping, and outputs such as `fullfade` (whole strip brightness from range) and `segmentsolid` (target segment vs others with A/B colors/brightness).
+- `idle` block defines color/brightness/transition when idle or when watched apps close.
+- ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` for `segmentsolid`.
 
-## ESDE integration (planned)
-- ESDE will call a minimal CLI script: `python runlights_cli.py <name>` (e.g., `python runlights_cli.py snes`). No other arguments or flags are used.
-- The CLI hands the console name to the tray process via IPC (Windows named pipe); the tray resolves it using the ESDE bindings in `config.toml` and applies actions/presets with transitions.
-- Only `/scripts/game-select` is needed; `/scripts/startup` and `/scripts/quit` can be dropped because process detection will handle ESDE lifecycle.
+## ESDE integration
+- Minimal standalone helper: `python standalone_cli.py <console>` (or place alongside ES-DE scripts; it reads `argv[3]` too). It sends the console name over the named pipe; if the tray isn’t running it no-ops without crashing ES-DE.
+- Only `/scripts/game-select` is needed; process detection handles startup/quit.
 
-## Current CLI scaffold
-- Entry point: `python runlights_cli.py <name>` (runs without installing; uses local `src/`).
-- Behavior today: forwards the console name to the tray via IPC. If the tray isn't running, it exits non-zero with a warning.
-- Next step: implement WLED apply path and direct-apply fallback; the tray resolves the name using config bindings.
+## Debug window commands
+- `show applications` / `show controllers`
+- `testoutput <app>.<mode> <value>`: drives outputs via config (`fullfade` uses range; `segmentsolid` uses bindings A/B).
+- `testoutput idle`: apply idle color/brightness to all segments.
 
 ## Tray IPC (Windows)
 - IPC uses a Windows named pipe: `\\.\pipe\runlights_ipc` (requires `pywin32`).
-- Run the tray: `python runlights.py` (reads `config.toml` from the working directory); no command-line arguments are used. This will later be packaged as an auto-starting exe.
+- Run the tray: `runlights.pyw` (reads `config.toml` from the working directory); no command-line arguments are used. This will later be packaged as an auto-starting exe.
 - Tray icon: uses a bundled `icon.ico` in the app folder (hard-coded fallback shape if missing); requires `pystray` and `Pillow`.
 - The CLI connects to the pipe and sends a JSON message: `{"type":"console","name":"<your console>"}`.
 
