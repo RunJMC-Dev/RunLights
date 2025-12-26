@@ -44,8 +44,10 @@ Replace the host/segment/effect labels to match your WLED setup.
 
 ## Tray IPC (Windows)
 - IPC uses a Windows named pipe: `\\.\pipe\runlights_ipc` (requires `pywin32`).
-- Run the tray server: `python runlights_tray.py` (reads `config.toml` from the working directory).
-- The CLI connects to that pipe and sends a JSON message: `{"type":"console","name":"<your console>"}`.
+- Run the tray server: `python runlights_tray.py [--debug] [--no-tray]` (reads `config.toml` from the working directory).
+- Tray icon (optional): requires `pystray` and `Pillow`; disable with `--no-tray` if not installed.
+- Debug window (optional): `--debug` opens a simple Tk window (placeholder for future debug UI).
+- The CLI connects to the pipe and sends a JSON message: `{"type":"console","name":"<your console>"}`.
 
 ## Roadmap
 - Decide on Python version and dependency set.

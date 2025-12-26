@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any, Dict
 
@@ -31,7 +32,7 @@ def _create_pipe():
     )
 
 
-def serve(config_path: Path | str = "config.toml") -> None:
+def serve(config_path: Path | str = "config.toml", stop_event: threading.Event | None = None) -> None:
     """Start the tray IPC server (blocking) on a Windows named pipe."""
     logging.basicConfig(
         level=logging.INFO,
@@ -39,6 +40,9 @@ def serve(config_path: Path | str = "config.toml") -> None:
     )
     log.info("Tray IPC listening on %s", PIPE_NAME)
     while True:
+        if stop_event and stop_event.is_set():
+            log.info("Tray IPC stop requested")
+            break
         pipe = _create_pipe()
         try:
             win32pipe.ConnectNamedPipe(pipe, None)
@@ -90,6 +94,13 @@ def serve(config_path: Path | str = "config.toml") -> None:
                 pass
 
 
+def serve_in_thread(config_path: Path | str = "config.toml", stop_event: threading.Event | None = None) -> threading.Thread:
+    """Start the tray IPC server in a background thread."""
+    thread = threading.Thread(target=serve, args=(config_path, stop_event), daemon=True)
+    thread.start()
+    return thread
+
+
 def _read_message(pipe_handle) -> bytes:
     """Read a single message terminated by newline."""
     chunks: list[bytes] = []
@@ -112,4 +123,3 @@ def _send_message(pipe_handle, payload: Dict[str, Any]) -> None:
     data = json.dumps(payload).encode("utf-8") + b"\n"
     win32file.WriteFile(pipe_handle, data)
     win32file.FlushFileBuffers(pipe_handle)
-
