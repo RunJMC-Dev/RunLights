@@ -1,14 +1,16 @@
 config_version = 1
 
-# Where your real config will live on Windows:
-#   %APPDATA%/RunLights/config.toml
+# Place your real config next to the app (same folder):
+#   ./config.toml
 # Copy this file there and edit the values to match your setup.
 
 update_interval_ms = 500      # How often to send REST updates (tweak for performance).
 default_transition_ms = 150   # Crossfade time for REST updates to smooth changes.
 
 [[controllers]]
-name = "shelf"
+# Use an ID for references (no spaces). "name" is display-only.
+id = "shelf"
+name = "Shelf Lights"
 host = "192.168.1.50"
 
   [[controllers.segments]]
@@ -20,7 +22,8 @@ host = "192.168.1.50"
   label = "ps2"
 
 [[controllers]]
-name = "desk"
+id = "desk"
+name = "Desk Lights"
 host = "192.168.1.51"
 
 [defaults]
@@ -81,3 +84,33 @@ input = "screen_region"
   source = "screen_region"
   healthy = "#00ff00"
   low = "#ff0000"
+
+# Console mappings for ESDE (used by the CLI to trigger presets/actions by console name).
+[[consoles]]
+name = "snes"                 # Console name passed from ESDE CLI.
+friendlyname = "Super Nintendo"
+
+  [[consoles.actions]]
+  controller = "shelf"
+  segment = "snes"
+  state = "on"
+  color = "#00aaff"
+  brightness = 140
+  transition_ms = 200
+
+[[consoles]]
+name = "megadrive"
+friendlyname = "Mega Drive"
+
+  [[consoles.actions]]
+  controller = "shelf"
+  segment = "megadrive"
+  state = "on"
+  color = "#ffaa00"
+  brightness = 160
+  transition_ms = 200
+
+  [[consoles.actions]]
+  controller = "shelf"
+  segment = "snes"
+  state = "off"

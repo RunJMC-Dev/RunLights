@@ -1,0 +1,142 @@
+config_version = 1
+
+# Place your real config next to the app (same folder):
+#   ./config.toml
+# Copy this file there and edit the values to match your setup.
+
+update_interval_ms = 500      # How often to send REST updates (tweak for performance).
+default_transition_ms = 150   # Crossfade time for REST updates to smooth changes.
+
+# Define your WLED controllers here.
+[[controllers]]
+id = "PCROOMLHS"
+friendlyname = "PC Room Left Shelf"
+host = "192.168.20.118"
+
+  [[controllers.segments]]
+  id = 0
+  label = "microbee"
+  friendlyname = "Microbee"
+
+  [[controllers.segments]]
+  id = 1
+  label = "amiga"
+  friendlyname = "Commodore Amiga 1200"
+
+  [[controllers.segments]]
+  id = 2
+  label = "atari"
+  friendlyname = "Atari 2600"
+
+  [[controllers.segments]]
+  id = 3
+  label = "n64"
+  friendlyname = "Nintendo 64"
+
+  [[controllers.segments]]
+  id = 4
+  label = "snes"
+  friendlyname = "Super Nintendo"
+
+  [[controllers.segments]]
+  id = 5
+  label = "nes"
+  friendlyname = "Nintendo Entertainment System"
+
+[[controllers]]
+id = "PCROOMRHS"
+friendlyname = "PC Room Right Shelf"
+host = "192.168.20.245"
+
+  [[controllers.segments]]
+  id = 0
+  label = "c64"
+  friendlyname = "Commodore 64"
+
+  [[controllers.segments]]
+  id = 1
+  label = "dreamcast"
+  friendlyname = "PC Room Right Shelf"
+
+  [[controllers.segments]]
+  id = 2
+  label = "saturn"
+  friendlyname = "saturn"
+
+  [[controllers.segments]]
+  id = 3
+  label = "megadrive"
+  friendlyname = "Mega Drive"
+
+  [[controllers.segments]]
+  id = 4
+  label = "gamegear"
+  friendlyname = "Game Gear"
+
+  [[controllers.segments]]
+  id = 5
+  label = "mastersystem"
+  friendlyname = "Master System"
+
+  [[controllers.segments]]
+  id = 6
+  label = "ps2"
+  friendlyname = "PlayStation 2"
+
+[defaults]
+mode = "idle"
+output = "#FFFFFF"
+controller = "all"
+
+# Applications and their modes
+[[application]]
+id = "quake1"
+friendlyname = "Quake"
+processes = ["quake.exe"]
+
+  [[application.modes]]
+  id = "health"
+  input = "screen_region"
+  output = "fullfade"
+  color = "#ff0000"
+  x = 1200
+  y = 500
+  width = 100
+  height = 200
+  controller = "PCROOMLHS"
+
+  [[application.modes]]
+  id = "ammo"
+  input = "screen_region"
+  output = "fullfade"
+  color = "#ffff00"
+  x = 1200
+  y = 500
+  width = 100
+  height = 200
+  controller = "PCROOMRHS"
+
+[[application]]
+id = "esde"
+friendlyname = "Emulation Station Desktop Edition"
+processes = ["emulationstation.exe"]
+
+  [[application.modes]]
+  id = "game-select"
+  input = "CLI"
+  output = "segmentsolid"
+  color = "#ff0000"
+  controllers = ["PCROOMLHS", "PCROOMRHS"]
+
+    [application.modes."game-select".bindings]
+    amiga = { controller = "PCROOMLHS", segment = 1 }
+    atari = { controller = "PCROOMLHS", segment = 2 }
+    n64 = { controller = "PCROOMLHS", segment = 3 }
+    snes = { controller = "PCROOMLHS", segment = 4 }
+    nes = { controller = "PCROOMLHS", segment = 5 }
+    c64 = { controller = "PCROOMRHS", segment = 0 }
+    dreamcast = { controller = "PCROOMRHS", segment = 1 }
+    saturn = { controller = "PCROOMRHS", segment = 2 }
+    megadrive = { controller = "PCROOMRHS", segment = 3 }
+    gamegear = { controller = "PCROOMRHS", segment = 4 }
+    mastersystem = { controller = "PCROOMRHS", segment = 5 }

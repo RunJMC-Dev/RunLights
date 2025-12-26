@@ -20,16 +20,22 @@ _Setup details are TBD; fill in once Python version and packaging are chosen (pi
 4. Run the GUI or CLI entrypoint (to be added).
 
 ## Configuration (TOML)
-- Copy `config.example.toml` to `%APPDATA%/RunLights/config.toml` and edit.
+- Copy `config.example.toml` to `config.toml` in the app folder (keep it beside the app so it moves with it) and edit.
 - Uses REST with transitions; default update interval is `500ms` and can be tweaked per config.
-- Define controllers (static IPs), segments, and modes keyed off process names.
-- Modes can have startup presets (with transitions), steady states, shortcuts, and optional screen-region input parameters (for games like Quake).
+- Controllers use an `id` for references (no spaces) plus an optional human-friendly `name`; define static IPs and segments.
+- Modes are keyed off process names; can include startup presets, steady states, shortcuts, and optional screen-region input parameters (for games like Quake).
+- ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` so `runlights-cli console <name>` can hand off to the tray.
 
 ## CLI example (planned)
 ```
 runlights --host 192.168.1.50 segments set --name "shelf" --effect "highlight" --label "megadrive"
 ```
 Replace the host/segment/effect labels to match your WLED setup.
+
+## ESDE integration (planned)
+- ESDE will call a minimal CLI: `runlights-cli console <name>` (e.g., `runlights-cli console snes`).
+- The CLI hands the console name to the tray process via IPC; the tray resolves it using the ESDE bindings in `config.toml` and applies actions/presets with transitions.
+- Only `/scripts/game-select` is needed; `/scripts/startup` and `/scripts/quit` can be dropped because process detection will handle ESDE lifecycle.
 
 ## Roadmap
 - Decide on Python version and dependency set.
