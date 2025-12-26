@@ -133,5 +133,5 @@ processes = ["emulationstation.exe"]
     saturn = { controller = "PCROOMRHS", segment = 2 },
     megadrive = { controller = "PCROOMRHS", segment = 3 },
     gamegear = { controller = "PCROOMRHS", segment = 4 },
-    mastersystem = { controller = "PCROOMRHS", segment = 5 },
+    mastersystem = { controller = "PCROOMRHS", segment = 5 }
   }
