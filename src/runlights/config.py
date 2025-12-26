@@ -25,7 +25,14 @@ class Config:
             for mode in modes:
                 if mode.get("id") != "game-select":
                     continue
-                bindings = mode.get("bindings", {})
+                bindings = mode.get("bindings")
+                # Support dotted table form: [application.modes."game-select".bindings]
+                if bindings is None and "game-select" in mode:
+                    inner = mode.get("game-select")
+                    if isinstance(inner, dict):
+                        bindings = inner.get("bindings")
+                if not bindings:
+                    return None
                 return bindings.get(console_name)
         return None
 
@@ -39,4 +46,3 @@ def load_config(path: Path | str = "config.toml") -> Config:
     except Exception as exc:  # broad catch to surface file issues
         raise ConfigError(f"Failed to parse config: {exc}") from exc
     return Config(raw=data, path=config_path)
-
