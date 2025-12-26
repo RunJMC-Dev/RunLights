@@ -33,6 +33,7 @@ except Exception:
 
 # Hard-coded icon path (use bundled icon.ico if present).
 ICON_PATH = _here / "icon.ico"
+SINGLE_INSTANCE_PIPE = PIPE_NAME  # reuse the IPC pipe name for single-instance guard
 
 
 def start_tray_icon(stop_event: threading.Event, debug_request: threading.Event) -> pystray.Icon | None:
@@ -148,6 +149,14 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
     log_box = scrolledtext.ScrolledText(content, width=72, height=16, state="disabled", font=("Consolas", 9))
     log_box.pack(padx=6, pady=6, fill="both", expand=True)
 
+    input_frame = ttk.Frame(content)
+    input_frame.pack(fill="x", padx=6, pady=(0, 6))
+    input_var = tk.StringVar()
+    input_entry = ttk.Entry(input_frame, textvariable=input_var)
+    input_entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
+    send_btn = ttk.Button(input_frame, text="Send", command=lambda: None)
+    send_btn.pack(side="right")
+
     def append_line(line: str, preformatted: bool = False):
         text = line if preformatted else f"[{datetime.now().strftime('%H:%M:%S')}] {line}"
         log_box.configure(state="normal")
@@ -249,6 +258,37 @@ def main() -> int:
     except ConfigError as exc:
         log_message(f"Config error: {exc}")
         cfg = None
+
+    # Single instance guard: if pipe already exists, exit.
+    try:
+        import win32file
+        import win32pipe
+        import pywintypes
+    except Exception:
+        log_message("Single-instance check skipped (pywin32 missing)")
+    else:
+        try:
+            handle = win32file.CreateFile(
+                SINGLE_INSTANCE_PIPE,
+                win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+                0,
+                None,
+                win32file.OPEN_EXISTING,
+                0,
+                None,
+            )
+            # Pipe exists: another instance is running.
+            log_message("Another RunLights instance is already running. Exiting.")
+            return 0
+        except pywintypes.error as exc:
+            # If pipe not found, we'll create ours in serve_in_thread.
+            if exc.winerror != 2:  # 2 = file not found
+                log_message(f"Single-instance check error: {exc}")
+        finally:
+            try:
+                handle.Close()
+            except Exception:
+                pass
 
     serve_in_thread(config_path=CONFIG_PATH, stop_event=stop_event, log_queue=log_queue)
     log_message(f"Tray IPC started on {PIPE_NAME}")
