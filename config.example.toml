@@ -1,0 +1,83 @@
+config_version = 1
+
+# Where your real config will live on Windows:
+#   %APPDATA%/RunLights/config.toml
+# Copy this file there and edit the values to match your setup.
+
+update_interval_ms = 500      # How often to send REST updates (tweak for performance).
+default_transition_ms = 150   # Crossfade time for REST updates to smooth changes.
+
+[[controllers]]
+name = "shelf"
+host = "192.168.1.50"
+
+  [[controllers.segments]]
+  id = 1
+  label = "megadrive"
+
+  [[controllers.segments]]
+  id = 2
+  label = "ps2"
+
+[[controllers]]
+name = "desk"
+host = "192.168.1.51"
+
+[defaults]
+mode = "idle"
+fallback_color = "#202020"
+
+[[modes]]
+name = "esde"
+processes = ["emulationstation.exe"]
+
+  [modes.startup_preset]
+  controller = "shelf"
+  segment = "megadrive"
+  effect = "sparkles"
+  transition_ms = 300
+
+  [modes.steady_preset]
+  controller = "shelf"
+  segment = "megadrive"
+  state = "on"
+  color = "#ffaa00"
+  brightness = 140
+
+  [[modes.shortcuts]]
+  label = "megadrive_only"
+
+    [[modes.shortcuts.actions]]
+    controller = "shelf"
+    segment = "megadrive"
+    state = "on"
+
+    [[modes.shortcuts.actions]]
+    controller = "shelf"
+    segment = "ps2"
+    state = "off"
+
+[[modes]]
+name = "quake1"
+processes = ["quake.exe"]
+input = "screen_region"
+
+  [modes.input_params]
+  region = [100, 100, 500, 400]  # x, y, width, height
+  sample_rate_hz = 2
+
+  [modes.startup_preset]
+  controller = "desk"
+  state = "on"
+  color = "#ff0000"
+  transition_ms = 200
+
+  [modes.steady_preset]
+  controller = "desk"
+  state = "on"
+  transition_ms = 200
+
+  [modes.steady_preset.link_health_to]
+  source = "screen_region"
+  healthy = "#00ff00"
+  low = "#ff0000"
