@@ -6,6 +6,7 @@ import threading
 import time
 from pathlib import Path
 import queue
+from datetime import datetime
 
 # Allow running without installation by adjusting path.
 _here = Path(__file__).resolve().parent
@@ -13,6 +14,7 @@ sys.path.insert(0, str(_here / "src"))
 
 from runlights.tray import serve_in_thread  # noqa: E402
 from runlights.ipc import PIPE_NAME  # noqa: E402
+from runlights.config import load_config, ConfigError  # noqa: E402
 
 try:
     import pystray  # type: ignore
@@ -103,6 +105,8 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
     log_box.pack(padx=8, pady=6, fill="both", expand=True)
 
     def append_line(line: str):
+        ts = datetime.now().strftime("%H:%M:%S")
+        line = f"[{ts}] {line}"
         log_box.configure(state="normal")
         log_box.insert("end", line + "\n")
         log_box.configure(state="disabled")
@@ -143,6 +147,13 @@ def main() -> int:
     stop_event = threading.Event()
     debug_request = threading.Event()
     log_queue: "queue.Queue[str]" = queue.Queue()
+    # Log config load once at startup.
+    try:
+        cfg = load_config(Path("config.toml"))
+        log_queue.put(f"Config loaded: {cfg.path.resolve()}")
+    except ConfigError as exc:
+        log_queue.put(f"Config error: {exc}")
+
     serve_in_thread(config_path=Path("config.toml"), stop_event=stop_event, log_queue=log_queue)
     logging.info("Tray IPC started on %s", PIPE_NAME)
 
