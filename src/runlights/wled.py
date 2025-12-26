@@ -88,3 +88,32 @@ def send_simple(
     ctrl = WLEDController(host=host, port=port)
     payload = WLEDPayload(on=on, brightness=brightness, color=rgb, segment=segment, transition_ms=transition_ms)
     return send_state(ctrl, payload, timeout=timeout)
+
+
+def apply_fullfade(
+    host: str,
+    port: int,
+    color_hex: str,
+    health_pct: float,
+    transition_ms: Optional[int] = None,
+    timeout: float = 2.0,
+) -> dict:
+    """
+    Fade the entire strip based on health percentage.
+
+    - health_pct is clamped to 0-100.
+    - brightness scales linearly 0-255 from health percentage.
+    - color is applied as the primary color; no segments specified (whole strip).
+    """
+    pct = max(0.0, min(100.0, float(health_pct)))
+    bri = int(255 * (pct / 100.0))
+    return send_simple(
+        host=host,
+        port=port,
+        on=True,
+        brightness=bri,
+        color=color_hex,
+        segment=None,
+        transition_ms=transition_ms,
+        timeout=timeout,
+    )
