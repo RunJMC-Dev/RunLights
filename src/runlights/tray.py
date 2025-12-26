@@ -48,11 +48,11 @@ def serve(
     log_queue: Optional[Queue[str]] = None,
 ) -> None:
     """Start the tray IPC server (blocking) on a Windows named pipe."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
-    )
-    log.info("Tray IPC listening on %s", PIPE_NAME)
+    if log_queue is not None:
+        try:
+            log_queue.put(f"Tray IPC listening on {PIPE_NAME}")
+        except Exception:
+            pass
     while True:
         if stop_event and stop_event.is_set():
             log.info("Tray IPC stop requested")

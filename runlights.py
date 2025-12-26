@@ -157,10 +157,8 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
 
 
 def main() -> int:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
-    )
+    # Keep console logging minimal; main logging goes to the debug window queue.
+    logging.basicConfig(level=logging.ERROR)
     stop_event = threading.Event()
     debug_request = threading.Event()
     log_queue: "queue.Queue[str]" = queue.Queue()
@@ -174,7 +172,7 @@ def main() -> int:
         log_queue.put(f"Config error: {exc}")
 
     serve_in_thread(config_path=CONFIG_PATH, stop_event=stop_event, log_queue=log_queue)
-    logging.info("Tray IPC started on %s", PIPE_NAME)
+    log_queue.put(f"Tray IPC started on {PIPE_NAME}")
 
     tray_icon = start_tray_icon(stop_event, debug_request)
 
