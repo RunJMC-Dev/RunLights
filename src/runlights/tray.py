@@ -4,7 +4,8 @@ import json
 import logging
 import threading
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+from queue import Queue
 
 try:
     import win32file
@@ -32,7 +33,11 @@ def _create_pipe():
     )
 
 
-def serve(config_path: Path | str = "config.toml", stop_event: threading.Event | None = None) -> None:
+def serve(
+    config_path: Path | str = "config.toml",
+    stop_event: threading.Event | None = None,
+    log_queue: Optional[Queue[str]] = None,
+) -> None:
     """Start the tray IPC server (blocking) on a Windows named pipe."""
     logging.basicConfig(
         level=logging.INFO,
@@ -76,6 +81,11 @@ def serve(config_path: Path | str = "config.toml", stop_event: threading.Event |
                 continue
 
             log.info("Received console request: %s -> %s", console_name, binding)
+            if log_queue is not None:
+                try:
+                    log_queue.put(f"CLI: {console_name} -> {binding}")
+                except Exception:
+                    pass
             # TODO: apply binding via WLED REST with transitions.
             _send_message(pipe, {"status": "ok", "binding": binding})
         except KeyboardInterrupt:
@@ -94,9 +104,13 @@ def serve(config_path: Path | str = "config.toml", stop_event: threading.Event |
                 pass
 
 
-def serve_in_thread(config_path: Path | str = "config.toml", stop_event: threading.Event | None = None) -> threading.Thread:
+def serve_in_thread(
+    config_path: Path | str = "config.toml",
+    stop_event: threading.Event | None = None,
+    log_queue: Optional[Queue[str]] = None,
+) -> threading.Thread:
     """Start the tray IPC server in a background thread."""
-    thread = threading.Thread(target=serve, args=(config_path, stop_event), daemon=True)
+    thread = threading.Thread(target=serve, args=(config_path, stop_event, log_queue), daemon=True)
     thread.start()
     return thread
 

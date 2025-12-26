@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+import queue
 
 # Allow running without installation by adjusting path.
 _here = Path(__file__).resolve().parent
@@ -65,9 +66,15 @@ def _load_icon_image():
         return None
 
 
-def _run_debug_window(stop_event: threading.Event):
+def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"):
     try:
         import tkinter as tk
+        from tkinter import scrolledtext
+        try:
+            from PIL import Image, ImageTk  # type: ignore
+        except Exception:
+            Image = None  # type: ignore
+            ImageTk = None  # type: ignore
     except Exception as exc:
         logging.warning("Cannot open debug window (tkinter not available): %s", exc)
         return
@@ -75,8 +82,43 @@ def _run_debug_window(stop_event: threading.Event):
     root = tk.Tk()
     root.title("RunLights Debug")
     root.geometry("320x200")
-    tk.Label(root, text="RunLights debug view (placeholder)", font=("Segoe UI", 11)).pack(pady=8)
-    tk.Label(root, text=f"IPC pipe: {PIPE_NAME}", font=("Segoe UI", 9)).pack(pady=4)
+
+    if Image and ImageTk:
+        logo_path = _here / "images" / "logo.png"
+        if logo_path.exists():
+            try:
+                img = Image.open(logo_path)
+                img = img.resize((128, 128), Image.ANTIALIAS)
+                photo = ImageTk.PhotoImage(img)
+                logo_label = tk.Label(root, image=photo)
+                logo_label.image = photo  # keep reference
+                logo_label.pack(pady=4)
+            except Exception:
+                pass
+
+    tk.Label(root, text="RunLights debug view", font=("Segoe UI", 11)).pack(pady=4)
+    tk.Label(root, text=f"IPC pipe: {PIPE_NAME}", font=("Segoe UI", 9)).pack(pady=2)
+
+    log_box = scrolledtext.ScrolledText(root, width=40, height=6, state="disabled", font=("Consolas", 9))
+    log_box.pack(padx=8, pady=6, fill="both", expand=True)
+
+    def append_line(line: str):
+        log_box.configure(state="normal")
+        log_box.insert("end", line + "\n")
+        log_box.configure(state="disabled")
+        log_box.see("end")
+
+    append_line("Waiting for CLI messages...")
+
+    def poll_queue():
+        try:
+            while True:
+                line = log_queue.get_nowait()
+                append_line(line)
+        except queue.Empty:
+            pass
+        if not stop_event.is_set():
+            root.after(500, poll_queue)
 
     def poll_stop():
         if stop_event.is_set():
@@ -88,6 +130,7 @@ def _run_debug_window(stop_event: threading.Event):
         root.after(500, poll_stop)
 
     root.protocol("WM_DELETE_WINDOW", root.destroy)
+    root.after(500, poll_queue)
     root.after(500, poll_stop)
     root.mainloop()
 
@@ -99,7 +142,8 @@ def main() -> int:
     )
     stop_event = threading.Event()
     debug_request = threading.Event()
-    serve_in_thread(config_path=Path("config.toml"), stop_event=stop_event)
+    log_queue: "queue.Queue[str]" = queue.Queue()
+    serve_in_thread(config_path=Path("config.toml"), stop_event=stop_event, log_queue=log_queue)
     logging.info("Tray IPC started on %s", PIPE_NAME)
 
     tray_icon = start_tray_icon(stop_event, debug_request)
@@ -108,7 +152,7 @@ def main() -> int:
         while not stop_event.is_set():
             if debug_request.is_set():
                 debug_request.clear()
-                _run_debug_window(stop_event)
+                _run_debug_window(stop_event, log_queue)
             time.sleep(0.1)
     except KeyboardInterrupt:
         stop_event.set()
