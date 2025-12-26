@@ -417,13 +417,99 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
         log_message(f"Unsupported output type: {output_type}")
 
 
-def _process_watch_loop(watch: set[str], stop_event: threading.Event, log_message):
+def _apply_segmentsolid_base(mode: dict, cfg_raw: dict, log_message):
+    bindings = mode.get("bindings", {})
+    controllers_filter = mode.get("controllers", [])
+    acolor = mode.get("acolor", "#000000")
+    bcolor = mode.get("bcolor", "#000000")
+    try:
+        abri = int(mode.get("abrightness", 0))
+        bbri = int(mode.get("bbrightness", 0))
+    except Exception:
+        log_message("Invalid brightness values")
+        return
+    transition_ms = mode.get("transition_ms", cfg_raw.get("default_transition_ms"))
+    # Base state: no target; all segments get B.
+    for ctrl_entry in cfg_raw.get("controllers", []):
+        cid = ctrl_entry.get("id")
+        if controllers_filter and cid not in controllers_filter:
+            continue
+        chost = ctrl_entry.get("host")
+        cport = int(ctrl_entry.get("port", 80))
+        segments = ctrl_entry.get("segments", [])
+        if not segments:
+            continue
+        seg_updates = []
+        for seg in segments:
+            seg_id = seg.get("id")
+            seg_updates.append(
+                wled.WLEDPayload(
+                    on=bbri > 0,
+                    brightness=bbri,
+                    color=wled._hex_to_rgb(bcolor),
+                    segment=seg_id,
+                )
+            )
+        try:
+            wled.send_batch(
+                controller=wled.WLEDController(host=chost, port=cport),
+                seg_updates=seg_updates,
+                transition_ms=transition_ms,
+            )
+        except Exception as exc:
+            log_message(f"WLED error on {cid}: {exc}")
+    log_message("Applied segmentsolid base state")
+
+
+def _apply_idle(cfg_raw: dict, log_message):
+    idle_cfg = cfg_raw.get("idle", {})
+    color_hex = idle_cfg.get("color", "#000000")
+    try:
+        bri = int(idle_cfg.get("brightness", 0))
+    except Exception:
+        bri = 0
+    transition_ms = idle_cfg.get("transition_ms", cfg_raw.get("default_transition_ms"))
+    for ctrl_entry in cfg_raw.get("controllers", []):
+        chost = ctrl_entry.get("host")
+        cport = int(ctrl_entry.get("port", 80))
+        segments = ctrl_entry.get("segments", [])
+        if not segments:
+            continue
+        seg_updates = []
+        for seg in segments:
+            seg_id = seg.get("id")
+            seg_updates.append(
+                wled.WLEDPayload(
+                    on=bri > 0,
+                    brightness=bri,
+                    color=wled._hex_to_rgb(color_hex),
+                    segment=seg_id,
+                )
+            )
+        try:
+            wled.send_batch(
+                controller=wled.WLEDController(host=chost, port=cport),
+                seg_updates=seg_updates,
+                transition_ms=transition_ms,
+            )
+        except Exception as exc:
+            log_message(f"WLED error on {ctrl_entry.get('id')}: {exc}")
+    log_message("Applied idle state")
+
+
+def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message):
+    watch: dict[str, str] = {}
+    for app in cfg_raw.get("application", []):
+        for name in app.get("processes", []):
+            if isinstance(name, str):
+                watch[name.lower()] = app.get("id")
     if not watch:
         return
     if psutil is None:
         log_message("Process watch unavailable (psutil not installed)")
         return
     seen: set[str] = set()
+    active_app: str | None = None
     try:
         while not stop_event.is_set():
             current: set[str] = set()
@@ -433,13 +519,26 @@ def _process_watch_loop(watch: set[str], stop_event: threading.Event, log_messag
                     if not name:
                         continue
                     if name in watch:
-                        current.add(name)
-                started = current - seen
-                stopped = seen - current
-                for name in sorted(started):
-                    log_message(f"{name} started")
-                for name in sorted(stopped):
-                    log_message(f"{name} terminated")
+                        current.add(watch[name])
+                started_apps = current - seen
+                stopped_apps = seen - current
+                for app_id in sorted(started_apps):
+                    log_message(f"{app_id} started")
+                for app_id in sorted(stopped_apps):
+                    log_message(f"{app_id} terminated")
+                # Switch active app
+                if started_apps:
+                    active_app = sorted(started_apps)[0]
+                    # Apply base output for first mode
+                    modes = next((a.get("modes", []) for a in cfg_raw.get("application", []) if a.get("id") == active_app), [])
+                    if modes:
+                        mode = modes[0]
+                        if mode.get("output") == "segmentsolid":
+                            _apply_segmentsolid_base(mode, cfg_raw, log_message)
+                elif stopped_apps:
+                    if active_app in stopped_apps or not current:
+                        active_app = None
+                        _apply_idle(cfg_raw, log_message)
                 seen = current
             except Exception as exc:
                 log_message(f"Process watch error: {exc}")
@@ -479,6 +578,9 @@ def main() -> int:
         log_message(f"Config error: {exc}")
         cfg = None
 
+    if cfg_raw is not None:
+        _apply_idle(cfg_raw, log_message)
+
     # Single instance guard: if pipe already exists, exit.
     try:
         import win32file
@@ -517,10 +619,9 @@ def main() -> int:
 
     # Start process watcher if we have processes configured.
     if cfg is not None:
-        watch = _gather_watch_processes(cfg.raw)
         threading.Thread(
             target=_process_watch_loop,
-            args=(watch, stop_event, log_message),
+            args=(cfg.raw, stop_event, log_message),
             daemon=True,
         ).start()
 
