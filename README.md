@@ -34,13 +34,18 @@ Replace the host/segment/effect labels to match your WLED setup.
 
 ## ESDE integration (planned)
 - ESDE will call a minimal CLI: `python runlights_cli.py <name>` (e.g., `python runlights_cli.py snes`).
-- The CLI hands the console name to the tray process via IPC; the tray resolves it using the ESDE bindings in `config.toml` and applies actions/presets with transitions.
+- The CLI hands the console name to the tray process via IPC (Windows named pipe); the tray resolves it using the ESDE bindings in `config.toml` and applies actions/presets with transitions.
 - Only `/scripts/game-select` is needed; `/scripts/startup` and `/scripts/quit` can be dropped because process detection will handle ESDE lifecycle.
 
 ## Current CLI scaffold
 - Entry point: `python runlights_cli.py <name>` (runs without installing; uses local `src/`).
-- Behavior today: forwards the console name to the tray via IPC (not implemented yet). If the tray isn’t running, it exits non-zero with a warning.
-- Next step: implement tray IPC (named pipe/TCP) and direct-apply fallback; the tray will resolve the name using config bindings.
+- Behavior today: forwards the console name to the tray via IPC. If the tray isn’t running, it exits non-zero with a warning.
+- Next step: implement WLED apply path and direct-apply fallback; the tray resolves the name using config bindings.
+
+## Tray IPC (Windows)
+- IPC uses a Windows named pipe: `\\.\pipe\runlights_ipc` (requires `pywin32`).
+- Run the tray server: `python runlights_tray.py` (reads `config.toml` from the working directory).
+- The CLI connects to that pipe and sends a JSON message: `{"type":"console","name":"<your console>"}`.
 
 ## Roadmap
 - Decide on Python version and dependency set.
