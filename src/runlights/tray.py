@@ -71,7 +71,17 @@ def serve(
 
             try:
                 config = load_config(Path(config_path))
+                if log_queue is not None:
+                    try:
+                        log_queue.put(f"Config loaded: {Path(config_path).resolve()}")
+                    except Exception:
+                        pass
             except ConfigError as exc:
+                if log_queue is not None:
+                    try:
+                        log_queue.put(f"Config error: {exc}")
+                    except Exception:
+                        pass
                 _send_with_log(pipe, {"status": "error", "error": str(exc)}, log_queue)
                 continue
 
