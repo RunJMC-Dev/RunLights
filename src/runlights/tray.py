@@ -61,33 +61,27 @@ def serve(
                 continue
 
             if message.get("type") != "console":
-                _send_message(pipe, {"status": "error", "error": "unsupported_type"})
+                _send_with_log(pipe, {"status": "error", "error": "unsupported_type"}, log_queue)
                 continue
 
             console_name = message.get("name")
             if not console_name:
-                _send_message(pipe, {"status": "error", "error": "missing_name"})
+                _send_with_log(pipe, {"status": "error", "error": "missing_name"}, log_queue)
                 continue
 
             try:
                 config = load_config(Path(config_path))
             except ConfigError as exc:
-                _send_message(pipe, {"status": "error", "error": str(exc)})
+                _send_with_log(pipe, {"status": "error", "error": str(exc)}, log_queue)
                 continue
 
             binding = config.find_esde_binding(console_name)
             if binding is None:
-                _send_message(pipe, {"status": "error", "error": f"console '{console_name}' not found"})
+                _send_with_log(pipe, {"status": "error", "error": f"console '{console_name}' not found"}, log_queue)
                 continue
 
             log.info("Received console request: %s -> %s", console_name, binding)
-            if log_queue is not None:
-                try:
-                    log_queue.put(f"CLI: {console_name} -> {binding}")
-                except Exception:
-                    pass
-            # TODO: apply binding via WLED REST with transitions.
-            _send_message(pipe, {"status": "ok", "binding": binding})
+            _send_with_log(pipe, {"status": "ok", "binding": binding, "console": console_name}, log_queue)
         except KeyboardInterrupt:
             log.info("Tray IPC shutting down")
             break
@@ -137,3 +131,13 @@ def _send_message(pipe_handle, payload: Dict[str, Any]) -> None:
     data = json.dumps(payload).encode("utf-8") + b"\n"
     win32file.WriteFile(pipe_handle, data)
     win32file.FlushFileBuffers(pipe_handle)
+
+
+def _send_with_log(pipe_handle, payload: Dict[str, Any], log_queue: Optional[Queue[str]]) -> None:
+    _send_message(pipe_handle, payload)
+    if log_queue is None:
+        return
+    try:
+        log_queue.put(f"CLI: {payload}")
+    except Exception:
+        pass
