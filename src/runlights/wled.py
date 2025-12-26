@@ -66,7 +66,7 @@ def send_state(controller: WLEDController, payload: WLEDPayload, timeout: float 
     url = f"http://{controller.host}:{controller.port}/json/state"
     body = build_state_payload(payload)
     try:
-        resp = requests.post(url, data=json.dumps(body), timeout=timeout)
+        resp = requests.post(url, json=body, timeout=timeout)
         resp.raise_for_status()
         return resp.json() if resp.content else {}
     except Exception as exc:
