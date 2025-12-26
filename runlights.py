@@ -83,26 +83,26 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
 
     root = tk.Tk()
     root.title("RunLights Debug")
-    root.geometry("320x200")
+    root.geometry("640x480")
 
     if Image and ImageTk:
         logo_path = _here / "images" / "logo.png"
         if logo_path.exists():
             try:
                 img = Image.open(logo_path)
-                img = img.resize((128, 128), Image.ANTIALIAS)
+                img = img.resize((180, 180), Image.ANTIALIAS)
                 photo = ImageTk.PhotoImage(img)
                 logo_label = tk.Label(root, image=photo)
                 logo_label.image = photo  # keep reference
-                logo_label.pack(pady=4)
+                logo_label.pack(pady=8)
             except Exception:
                 pass
 
     tk.Label(root, text="RunLights debug view", font=("Segoe UI", 11)).pack(pady=4)
     tk.Label(root, text=f"IPC pipe: {PIPE_NAME}", font=("Segoe UI", 9)).pack(pady=2)
 
-    log_box = scrolledtext.ScrolledText(root, width=40, height=6, state="disabled", font=("Consolas", 9))
-    log_box.pack(padx=8, pady=6, fill="both", expand=True)
+    log_box = scrolledtext.ScrolledText(root, width=72, height=16, state="disabled", font=("Consolas", 9))
+    log_box.pack(padx=10, pady=8, fill="both", expand=True)
 
     def append_line(line: str):
         ts = datetime.now().strftime("%H:%M:%S")
