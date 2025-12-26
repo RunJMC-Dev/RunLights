@@ -74,6 +74,33 @@ def send_state(controller: WLEDController, payload: WLEDPayload, timeout: float 
         raise WLEDError(f"WLED request failed: {exc}") from exc
 
 
+def send_batch(controller: WLEDController, seg_updates: list[WLEDPayload], transition_ms: Optional[int] = None, timeout: float = 2.0) -> dict:
+    """
+    Send multiple segment updates in one request.
+    transition_ms applies to the whole request if provided.
+    """
+    seg_entries = []
+    for upd in seg_updates:
+        entry = {"id": int(upd.segment) if upd.segment is not None else 0}
+        if upd.on is not None:
+            entry["on"] = upd.on
+        if upd.brightness is not None:
+            entry["bri"] = max(0, min(255, int(upd.brightness)))
+        if upd.color is not None:
+            entry["col"] = [list(upd.color), [0, 0, 0], [0, 0, 0]]
+        seg_entries.append(entry)
+    body: dict = {"seg": seg_entries}
+    if transition_ms is not None:
+        body["tt"] = max(0, int(round(float(transition_ms) / 100.0)))
+    url = f"http://{controller.host}:{controller.port}/json/state"
+    try:
+        resp = requests.post(url, json=body, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json() if resp.content else {}
+    except Exception as exc:
+        raise WLEDError(f"WLED batch request failed: {exc}") from exc
+
+
 def send_simple(
     host: str,
     port: int = 80,

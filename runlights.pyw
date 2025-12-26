@@ -213,6 +213,43 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
                     append_line("Usage: testoutput <app>.<mode> <value>")
                     return
             _apply_output(mode, cfg_raw_global, val, append_line)
+        elif cmd == "testoutput idle":
+            if not cfg_raw_global:
+                append_line("No config loaded")
+                return
+            idle_cfg = cfg_raw_global.get("idle", {})
+            color_hex = idle_cfg.get("color", "#000000")
+            try:
+                bri = int(idle_cfg.get("brightness", 0))
+            except Exception:
+                bri = 0
+            transition_ms = idle_cfg.get("transition_ms", cfg_raw_global.get("default_transition_ms"))
+            for ctrl_entry in cfg_raw_global.get("controllers", []):
+                chost = ctrl_entry.get("host")
+                cport = int(ctrl_entry.get("port", 80))
+                segments = ctrl_entry.get("segments", [])
+                if not segments:
+                    continue
+                seg_updates = []
+                for seg in segments:
+                    seg_id = seg.get("id")
+                    seg_updates.append(
+                        wled.WLEDPayload(
+                            on=bri > 0,
+                            brightness=bri,
+                            color=wled._hex_to_rgb(color_hex),
+                            segment=seg_id,
+                        )
+                    )
+                try:
+                    wled.send_batch(
+                        controller=wled.WLEDController(host=chost, port=cport),
+                        seg_updates=seg_updates,
+                        transition_ms=transition_ms,
+                    )
+                except Exception as exc:
+                    append_line(f"WLED error on {ctrl_entry.get('id')}: {exc}")
+            append_line("Applied idle (all off)")
         else:
             append_line(f"Unknown command: {cmd}")
 
