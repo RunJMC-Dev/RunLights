@@ -24,22 +24,16 @@ _Setup details are TBD; fill in once Python version and packaging are chosen (pi
 - Uses REST with transitions; default update interval is `500ms` and can be tweaked per config.
 - Controllers use an `id` for references (no spaces) plus an optional human-friendly `name`; define static IPs and segments.
 - Modes are keyed off process names; can include startup presets, steady states, shortcuts, and optional screen-region input parameters (for games like Quake).
-- ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` so `runlights-cli console <name>` can hand off to the tray.
-
-## CLI example (planned)
-```
-runlights --host 192.168.1.50 segments set --name "shelf" --effect "highlight" --label "megadrive"
-```
-Replace the host/segment/effect labels to match your WLED setup.
+- ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` so `runlights_cli.py <name>` can hand off to the tray.
 
 ## ESDE integration (planned)
-- ESDE will call a minimal CLI: `python runlights_cli.py <name>` (e.g., `python runlights_cli.py snes`).
+- ESDE will call a minimal CLI script: `python runlights_cli.py <name>` (e.g., `python runlights_cli.py snes`). No other arguments or flags are used.
 - The CLI hands the console name to the tray process via IPC (Windows named pipe); the tray resolves it using the ESDE bindings in `config.toml` and applies actions/presets with transitions.
 - Only `/scripts/game-select` is needed; `/scripts/startup` and `/scripts/quit` can be dropped because process detection will handle ESDE lifecycle.
 
 ## Current CLI scaffold
 - Entry point: `python runlights_cli.py <name>` (runs without installing; uses local `src/`).
-- Behavior today: forwards the console name to the tray via IPC. If the tray isn’t running, it exits non-zero with a warning.
+- Behavior today: forwards the console name to the tray via IPC. If the tray isn't running, it exits non-zero with a warning.
 - Next step: implement WLED apply path and direct-apply fallback; the tray resolves the name using config bindings.
 
 ## Tray IPC (Windows)
