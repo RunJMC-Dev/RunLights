@@ -90,13 +90,13 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
         if logo_path.exists():
             try:
                 img = Image.open(logo_path)
-                img = img.resize((180, 180), Image.ANTIALIAS)
+                img.thumbnail((220, 180), Image.ANTIALIAS)
                 photo = ImageTk.PhotoImage(img)
                 logo_label = tk.Label(root, image=photo)
                 logo_label.image = photo  # keep reference
                 logo_label.pack(pady=8)
-            except Exception:
-                pass
+            except Exception as exc:
+                logging.warning("Failed to load logo %s: %s", logo_path, exc)
 
     tk.Label(root, text="RunLights debug view", font=("Segoe UI", 11)).pack(pady=4)
     tk.Label(root, text=f"IPC pipe: {PIPE_NAME}", font=("Segoe UI", 9)).pack(pady=2)
