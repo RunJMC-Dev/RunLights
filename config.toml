@@ -78,11 +78,6 @@ host = "192.168.20.245"
   label = "mastersystem"
   friendlyname = "Master System"
 
-  [[controllers.segments]]
-  id = 6
-  label = "ps2"
-  friendlyname = "PlayStation 2"
-
 [defaults]
 mode = "idle"
 output = "#FFFFFF"
