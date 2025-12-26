@@ -23,7 +23,7 @@ except Exception:  # pragma: no cover - optional dependency
 ICON_PATH = _here / "icon.ico"
 
 
-def start_tray_icon(stop_event: threading.Event) -> pystray.Icon | None:
+def start_tray_icon(stop_event: threading.Event, debug_request: threading.Event) -> pystray.Icon | None:
     if pystray is None:
         logging.warning("pystray/Pillow not installed; tray icon disabled")
         return None
@@ -33,14 +33,8 @@ def start_tray_icon(stop_event: threading.Event) -> pystray.Icon | None:
         logging.warning("No icon available; tray icon disabled")
         return None
 
-    debug_thread: threading.Thread | None = None
-
     def on_debug(icon, item):
-        nonlocal debug_thread
-        if debug_thread and debug_thread.is_alive():
-            return
-        debug_thread = threading.Thread(target=_run_debug_window, args=(stop_event,), daemon=True)
-        debug_thread.start()
+        debug_request.set()
 
     def on_quit(icon, item):
         stop_event.set()
@@ -104,14 +98,18 @@ def main() -> int:
         format="[%(asctime)s] %(levelname)s %(name)s: %(message)s",
     )
     stop_event = threading.Event()
+    debug_request = threading.Event()
     serve_in_thread(config_path=Path("config.toml"), stop_event=stop_event)
     logging.info("Tray IPC started on %s", PIPE_NAME)
 
-    tray_icon = start_tray_icon(stop_event)
+    tray_icon = start_tray_icon(stop_event, debug_request)
 
     try:
         while not stop_event.is_set():
-            time.sleep(0.5)
+            if debug_request.is_set():
+                debug_request.clear()
+                _run_debug_window(stop_event)
+            time.sleep(0.1)
     except KeyboardInterrupt:
         stop_event.set()
 
