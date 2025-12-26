@@ -342,6 +342,7 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             return
         target_segment = binding.get("segment")
         controllers_filter = mode.get("controllers", [])
+        transition_ms = mode.get("transition_ms", transition)
         for ctrl_entry in cfg_raw.get("controllers", []):
             cid = ctrl_entry.get("id")
             if controllers_filter and cid not in controllers_filter:
@@ -351,23 +352,29 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             segments = ctrl_entry.get("segments", [])
             if not segments:
                 continue
+            seg_updates = []
             for seg in segments:
                 seg_id = seg.get("id")
                 is_target = cid == target_controller and seg_id == target_segment
                 seg_color = acolor if is_target else bcolor
                 seg_bri = abri if is_target else bbri
-                try:
-                    wled.send_simple(
-                        host=chost,
-                        port=cport,
-                        on=True,
+                seg_on = seg_bri > 0
+                seg_updates.append(
+                    wled.WLEDPayload(
+                        on=seg_on,
                         brightness=seg_bri,
-                        color=seg_color,
+                        color=wled._hex_to_rgb(seg_color),
                         segment=seg_id,
-                        transition_ms=mode.get("transition_ms", transition),
                     )
-                except Exception as exc:
-                    log_message(f"WLED error on {cid} seg {seg_id}: {exc}")
+                )
+            try:
+                wled.send_batch(
+                    controller=wled.WLEDController(host=chost, port=cport),
+                    seg_updates=seg_updates,
+                    transition_ms=transition_ms,
+                )
+            except Exception as exc:
+                log_message(f"WLED error on {cid}: {exc}")
         log_message(f"Applied segmentsolid '{value}'")
     else:
         log_message(f"Unsupported output type: {output_type}")

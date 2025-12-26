@@ -17,6 +17,7 @@ except ImportError as exc:  # pragma: no cover - platform/dependency guard
 
 from .config import ConfigError, load_config
 from .ipc import PIPE_NAME
+from . import wled
 
 log = logging.getLogger("runlights.tray")
 
@@ -90,6 +91,10 @@ def serve(
                 continue
 
             log.info("Received console request: %s -> %s", console_name, binding)
+            apply_err = _apply_segmentsolid(binding, config.raw)
+            if apply_err:
+                _send_with_log(pipe, {"status": "error", "error": apply_err}, log_queue, raw=message)
+                continue
             _send_with_log(pipe, {"status": "ok", "binding": binding, "console": console_name}, log_queue, raw=message)
         except KeyboardInterrupt:
             log.info("Tray IPC shutting down")
@@ -152,3 +157,65 @@ def _send_with_log(pipe_handle, payload: Dict[str, Any], log_queue: Optional[Que
         log_queue.put(f"CLI send: {payload}")
     except Exception:
         pass
+
+
+def _apply_segmentsolid(binding: Dict[str, Any], cfg_raw: dict) -> Optional[str]:
+    """
+    Apply the segmentsolid output for ESDE game-select based on bindings and mode config.
+    """
+    try:
+        mode = next(
+            m for app in cfg_raw.get("application", []) if app.get("id") == "esde"
+            for m in app.get("modes", []) if m.get("id") == "game-select"
+        )
+    except StopIteration:
+        return "esde game-select mode not found"
+
+    controllers_filter = mode.get("controllers", [])
+    acolor = mode.get("acolor", "#000000")
+    bcolor = mode.get("bcolor", "#000000")
+    try:
+        abri = int(mode.get("abrightness", 0))
+        bbri = int(mode.get("bbrightness", 0))
+    except Exception:
+        return "Invalid brightness values"
+    transition_ms = mode.get("transition_ms", cfg_raw.get("default_transition_ms"))
+
+    target_controller = binding.get("controller")
+    target_segment = binding.get("segment")
+    if target_controller is None or target_segment is None:
+        return "Binding missing controller/segment"
+
+    for ctrl_entry in cfg_raw.get("controllers", []):
+        cid = ctrl_entry.get("id")
+        if controllers_filter and cid not in controllers_filter:
+            continue
+        chost = ctrl_entry.get("host")
+        cport = int(ctrl_entry.get("port", 80))
+        segments = ctrl_entry.get("segments", [])
+        if not segments:
+            continue
+        seg_updates = []
+        for seg in segments:
+            seg_id = seg.get("id")
+            is_target = cid == target_controller and seg_id == target_segment
+            seg_color = acolor if is_target else bcolor
+            seg_bri = abri if is_target else bbri
+            seg_on = seg_bri > 0
+            seg_updates.append(
+                wled.WLEDPayload(
+                    on=seg_on,
+                    brightness=seg_bri,
+                    color=wled._hex_to_rgb(seg_color),
+                    segment=seg_id,
+                )
+            )
+        try:
+            wled.send_batch(
+                controller=wled.WLEDController(host=chost, port=cport),
+                seg_updates=seg_updates,
+                transition_ms=transition_ms,
+            )
+        except Exception as exc:
+            return f"WLED error on {cid}: {exc}"
+    return None
