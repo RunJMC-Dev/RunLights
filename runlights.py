@@ -33,12 +33,21 @@ def start_tray_icon(stop_event: threading.Event) -> pystray.Icon | None:
         logging.warning("No icon available; tray icon disabled")
         return None
 
+    debug_thread: threading.Thread | None = None
+
+    def on_debug(icon, item):
+        nonlocal debug_thread
+        if debug_thread and debug_thread.is_alive():
+            return
+        debug_thread = threading.Thread(target=_run_debug_window, args=(stop_event,), daemon=True)
+        debug_thread.start()
+
     def on_quit(icon, item):
         stop_event.set()
         icon.stop()
 
     menu = pystray.Menu(
-        pystray.MenuItem("Debug", lambda icon, item: _open_debug_window(stop_event)),
+        pystray.MenuItem("Debug", on_debug),
         pystray.MenuItem("Quit", on_quit),
     )
     icon = pystray.Icon("RunLights", icon_image, "RunLights", menu=menu)
@@ -62,7 +71,7 @@ def _load_icon_image():
         return None
 
 
-def _open_debug_window(stop_event: threading.Event):
+def _run_debug_window(stop_event: threading.Event):
     try:
         import tkinter as tk
     except Exception as exc:
@@ -74,7 +83,18 @@ def _open_debug_window(stop_event: threading.Event):
     root.geometry("320x200")
     tk.Label(root, text="RunLights debug view (placeholder)", font=("Segoe UI", 11)).pack(pady=8)
     tk.Label(root, text=f"IPC pipe: {PIPE_NAME}", font=("Segoe UI", 9)).pack(pady=4)
+
+    def poll_stop():
+        if stop_event.is_set():
+            try:
+                root.destroy()
+            except Exception:
+                pass
+            return
+        root.after(500, poll_stop)
+
     root.protocol("WM_DELETE_WINDOW", root.destroy)
+    root.after(500, poll_stop)
     root.mainloop()
 
 
