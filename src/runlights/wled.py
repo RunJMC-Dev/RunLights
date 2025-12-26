@@ -41,7 +41,8 @@ def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
 def build_state_payload(payload: WLEDPayload) -> dict:
     body: dict = {}
     if payload.transition_ms is not None:
-        body["tt"] = int(payload.transition_ms)
+        # WLED expects transition in 1/10th second units ("tt").
+        body["tt"] = max(0, int(round(float(payload.transition_ms) / 100.0)))
     if payload.segment is None:
         # Whole strip
         if payload.on is not None:
