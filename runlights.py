@@ -37,7 +37,10 @@ def start_tray_icon(stop_event: threading.Event) -> pystray.Icon | None:
         stop_event.set()
         icon.stop()
 
-    menu = pystray.Menu(pystray.MenuItem("Quit", on_quit))
+    menu = pystray.Menu(
+        pystray.MenuItem("Debug", lambda icon, item: _open_debug_window(stop_event)),
+        pystray.MenuItem("Quit", on_quit),
+    )
     icon = pystray.Icon("RunLights", icon_image, "RunLights", menu=menu)
     icon.run_detached()
     return icon
@@ -57,6 +60,26 @@ def _load_icon_image():
         return img
     except Exception:
         return None
+
+
+def _open_debug_window(stop_event: threading.Event):
+    try:
+        import tkinter as tk
+    except Exception as exc:
+        logging.warning("Cannot open debug window (tkinter not available): %s", exc)
+        return
+
+    def on_close():
+        stop_event.set()
+        root.destroy()
+
+    root = tk.Tk()
+    root.title("RunLights Debug")
+    root.geometry("320x200")
+    tk.Label(root, text="RunLights debug view (placeholder)", font=("Segoe UI", 11)).pack(pady=8)
+    tk.Label(root, text=f"IPC pipe: {PIPE_NAME}", font=("Segoe UI", 9)).pack(pady=4)
+    root.protocol("WM_DELETE_WINDOW", on_close)
+    root.mainloop()
 
 
 def main() -> int:
@@ -83,4 +106,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
