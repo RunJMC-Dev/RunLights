@@ -2,3 +2,4 @@ pywin32
 pystray
 Pillow
 psutil
+requests
