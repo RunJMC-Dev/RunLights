@@ -57,16 +57,16 @@ def serve(
             try:
                 message = json.loads(raw.decode("utf-8"))
             except Exception:
-                _send_message(pipe, {"status": "error", "error": "invalid_json"})
+                _send_with_log(pipe, {"status": "error", "error": "invalid_json"}, log_queue, raw=raw.decode(errors="ignore"))
                 continue
 
             if message.get("type") != "console":
-                _send_with_log(pipe, {"status": "error", "error": "unsupported_type"}, log_queue)
+                _send_with_log(pipe, {"status": "error", "error": "unsupported_type"}, log_queue, raw=message)
                 continue
 
             console_name = message.get("name")
             if not console_name:
-                _send_with_log(pipe, {"status": "error", "error": "missing_name"}, log_queue)
+                _send_with_log(pipe, {"status": "error", "error": "missing_name"}, log_queue, raw=message)
                 continue
 
             try:
@@ -77,16 +77,16 @@ def serve(
                         log_queue.put(f"Config error: {exc}")
                     except Exception:
                         pass
-                _send_with_log(pipe, {"status": "error", "error": str(exc)}, log_queue)
+                _send_with_log(pipe, {"status": "error", "error": str(exc)}, log_queue, raw=message)
                 continue
 
             binding = config.find_esde_binding(console_name)
             if binding is None:
-                _send_with_log(pipe, {"status": "error", "error": f"console '{console_name}' not found"}, log_queue)
+                _send_with_log(pipe, {"status": "error", "error": f"console '{console_name}' not found"}, log_queue, raw=message)
                 continue
 
             log.info("Received console request: %s -> %s", console_name, binding)
-            _send_with_log(pipe, {"status": "ok", "binding": binding, "console": console_name}, log_queue)
+            _send_with_log(pipe, {"status": "ok", "binding": binding, "console": console_name}, log_queue, raw=message)
         except KeyboardInterrupt:
             log.info("Tray IPC shutting down")
             break
@@ -138,11 +138,13 @@ def _send_message(pipe_handle, payload: Dict[str, Any]) -> None:
     win32file.FlushFileBuffers(pipe_handle)
 
 
-def _send_with_log(pipe_handle, payload: Dict[str, Any], log_queue: Optional[Queue[str]]) -> None:
+def _send_with_log(pipe_handle, payload: Dict[str, Any], log_queue: Optional[Queue[str]], raw: Any = None) -> None:
     _send_message(pipe_handle, payload)
     if log_queue is None:
         return
     try:
-        log_queue.put(f"CLI: {payload}")
+        if raw is not None:
+            log_queue.put(f"CLI recv: {raw}")
+        log_queue.put(f"CLI send: {payload}")
     except Exception:
         pass

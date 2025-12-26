@@ -103,7 +103,6 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
                 logging.warning("Failed to load logo %s: %s", logo_path, exc)
 
     tk.Label(root, text="RunLights debug view", font=("Segoe UI", 11)).pack(pady=4)
-    tk.Label(root, text=f"IPC pipe: {PIPE_NAME}", font=("Segoe UI", 9)).pack(pady=2)
 
     log_box = scrolledtext.ScrolledText(root, width=72, height=16, state="disabled", font=("Consolas", 9))
     log_box.pack(padx=10, pady=8, fill="both", expand=True)
@@ -115,8 +114,6 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
         log_box.insert("end", line + "\n")
         log_box.configure(state="disabled")
         log_box.see("end")
-
-    append_line("Waiting for CLI messages...")
 
     def poll_queue():
         try:
