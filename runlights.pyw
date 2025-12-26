@@ -154,7 +154,7 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
     input_var = tk.StringVar()
     input_entry = ttk.Entry(input_frame, textvariable=input_var)
     input_entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
-    send_btn = ttk.Button(input_frame, text="Send", command=lambda: None)
+    send_btn = ttk.Button(input_frame, text="Send")
     send_btn.pack(side="right")
 
     def append_line(line: str, preformatted: bool = False):
@@ -167,6 +167,27 @@ def _run_debug_window(stop_event: threading.Event, log_queue: "queue.Queue[str]"
     # preload existing buffer
     for entry in log_buffer:
         append_line(entry, preformatted=True)
+
+    def handle_command(cmd: str):
+        cmd = cmd.strip().lower()
+        if not cmd:
+            return
+        if cmd == "show applications":
+            result = _format_applications(cfg_raw_global) if cfg_raw_global else "(no config loaded)"
+            append_line(result)
+        elif cmd == "show controllers":
+            result = _format_controllers(cfg_raw_global) if cfg_raw_global else "(no config loaded)"
+            append_line(result)
+        else:
+            append_line(f"Unknown command: {cmd}")
+
+    def on_send(event=None):
+        text = input_var.get()
+        input_var.set("")
+        handle_command(text)
+
+    send_btn.configure(command=on_send)
+    input_entry.bind("<Return>", on_send)
 
     def poll_queue():
         try:
@@ -201,6 +222,25 @@ def _gather_watch_processes(cfg_raw: dict) -> set[str]:
             if isinstance(name, str):
                 watch.add(name.lower())
     return watch
+
+
+def _format_applications(cfg_raw: dict) -> str:
+    lines: list[str] = []
+    for app in cfg_raw.get("application", []):
+        app_id = app.get("id", "(unknown)")
+        procs = app.get("processes", [])
+        lines.append(f"- {app_id}: {', '.join(procs) if procs else '(no processes)'}")
+    return "\n".join(lines) if lines else "(no applications)"
+
+
+def _format_controllers(cfg_raw: dict) -> str:
+    lines: list[str] = []
+    for ctrl in cfg_raw.get("controllers", []):
+        cid = ctrl.get("id", "(unknown)")
+        host = ctrl.get("host", "")
+        segs = ctrl.get("segments", [])
+        lines.append(f"- {cid} @ {host} ({len(segs)} segments)")
+    return "\n".join(lines) if lines else "(no controllers)"
 
 
 def _process_watch_loop(watch: set[str], stop_event: threading.Event, log_message):
@@ -241,6 +281,10 @@ def main() -> int:
     debug_request = threading.Event()
     log_queue: "queue.Queue[str]" = queue.Queue()
     log_buffer: list[str] = []
+    cfg_raw: dict | None = None
+    # expose cfg to debug window commands
+    global cfg_raw_global
+    cfg_raw_global = None
 
     def log_message(msg: str):
         entry = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
@@ -253,6 +297,8 @@ def main() -> int:
     debug_on_start = False
     try:
         cfg = load_config(CONFIG_PATH)
+        cfg_raw = cfg.raw
+        cfg_raw_global = cfg.raw
         log_message(f"Config loaded: {cfg.path.resolve()}")
         debug_on_start = bool(cfg.raw.get("debug", False))
     except ConfigError as exc:
