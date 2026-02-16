@@ -2852,8 +2852,7 @@ def _ocr_poll_loop(
                                 ocr_fail_queue.put((entry["app_id"], entry["mode_id"]))
                             except Exception:
                                 pass
-                        log_message("OCR stopped after non-numeric result")
-                        return
+                        continue
                 _apply_output(entry["mode"], cfg_raw, val, log_message)
             time.sleep(0.05)
     except Exception as exc:
