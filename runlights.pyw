@@ -1114,6 +1114,14 @@ def _run_debug_window(
                     except Exception:
                         out_bbri.setValue(0)
                     out_segment_reverse.setChecked(bool(existing.get("segmentorderreverse", False)))
+                else:
+                    # Defaults for new fullfade setups
+                    out_minvalue.setText("0")
+                    out_maxvalue.setText("255")
+                    out_acolor.setText("#ffffff")
+                    out_abri.setValue(255)
+                    out_bcolor.setText("#aa0000")
+                    out_bbri.setValue(255)
 
                 _toggle_groups()
 
