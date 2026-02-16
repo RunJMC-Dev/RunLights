@@ -2301,6 +2301,7 @@ def _extract_number(text: str) -> float | None:
 
 
 def _apply_input_range(mode: dict, value: float | None, log_message=None) -> float | None:
+    """Normalize input to 0-100 when inputrangemin/max are set."""
     if value is None:
         return None
     try:
@@ -2308,17 +2309,14 @@ def _apply_input_range(mode: dict, value: float | None, log_message=None) -> flo
         max_v = mode.get("inputrangemax")
         min_f = float(min_v) if min_v is not None and str(min_v).strip() != "" else None
         max_f = float(max_v) if max_v is not None and str(max_v).strip() != "" else None
-        if min_f is not None and value < min_f:
-            if log_message:
-                log_message(f"Value {value} below inputrangemin {min_f} ignored")
-            return None
-        if max_f is not None and value > max_f:
-            if log_message:
-                log_message(f"Value {value} above inputrangemax {max_f} ignored")
-            return None
+        if min_f is None or max_f is None:
+            return value
+        if max_f <= min_f:
+            return value
+        pct = (value - min_f) / (max_f - min_f) * 100.0
+        return max(0.0, min(100.0, pct))
     except Exception:
-        pass
-    return value
+        return value
 
 
 def _perform_ocr(
