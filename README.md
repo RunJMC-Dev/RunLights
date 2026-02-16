@@ -33,7 +33,16 @@ Inputs
 - `CLI`: input is provided by the named-pipe CLI (used for ES-DE console selection).
 
 Outputs
-- `fullfade`: map a numeric value to overall brightness/color on one or more controllers (uses `minvalue`/`maxvalue`).
+- `fullfade`:
+  - Technical description: apply the input value (0-100) as a brightness of all segments on the defined controllers.
+  - Dialog description: Fade from A to B. (tip set A/B brightness to 0 to fade to/from black)
+  - Settings:
+    - min brightness: WLED min brightness (range 1-255)
+    - max brightness: WLED max brightness (range 1-255)
+    - acolour: colour at 0
+    - abrightness: brightness at 0
+    - bcolour: colour at 100
+    - bbrightness: brightness at 100
 - `segmentsolid`: apply A/B colors to segments, highlighting a bound target segment.
 - `segmentpercent`: fill a percentage of segments based on a numeric value.
 
