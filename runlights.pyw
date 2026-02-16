@@ -776,76 +776,7 @@ def _run_debug_window(
             form.addRow("Process", process)
             form.addRow(_section_line(), QtWidgets.QLabel(""))
 
-            form.addRow(_section_label("Input"), QtWidgets.QLabel(""))
-            input_mode = QtWidgets.QComboBox()
-            input_mode.addItems(["None", "screen_region", "CLI"])
-            form.addRow("Mode", input_mode)
-            input_opts = QtWidgets.QWidget(dialog)
-            input_form = QtWidgets.QFormLayout(input_opts)
-            input_form.setContentsMargins(0, 0, 0, 0)
-            input_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
-            input_x = QtWidgets.QLineEdit()
-            input_y = QtWidgets.QLineEdit()
-            input_w = QtWidgets.QLineEdit()
-            input_h = QtWidgets.QLineEdit()
-            for w in (input_x, input_y, input_w, input_h):
-                w.setPlaceholderText("0")
-            input_form.addRow("X", input_x)
-            input_form.addRow("Y", input_y)
-            input_form.addRow("Width", input_w)
-            input_form.addRow("Height", input_h)
-            input_opts.setVisible(False)
-            form.addRow("", input_opts)
-            form.addRow(_section_line(), QtWidgets.QLabel(""))
-
-            form.addRow(_section_label("Output"), QtWidgets.QLabel(""))
-            mode_id = QtWidgets.QLineEdit()
-            mode_id.setPlaceholderText("e.g. health")
-            output_mode = QtWidgets.QComboBox()
-            output_mode.addItems(["None", "fullfade", "segmentsolid", "segmentpercent"])
-            form.addRow("Mode id", mode_id)
-            form.addRow("Mode", output_mode)
-
-            output_opts = QtWidgets.QWidget(dialog)
-            output_form = QtWidgets.QFormLayout(output_opts)
-            output_form.setContentsMargins(0, 0, 0, 0)
-            output_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
-
-            out_controllers = QtWidgets.QLineEdit()
-            out_controllers.setPlaceholderText("e.g. PCROOMLHS, PCROOMRHS")
-            out_rangelow = QtWidgets.QLineEdit()
-            out_rangehigh = QtWidgets.QLineEdit()
-            out_minvalue = QtWidgets.QLineEdit()
-            out_maxvalue = QtWidgets.QLineEdit()
-            out_acolor = QtWidgets.QLineEdit()
-            out_bcolor = QtWidgets.QLineEdit()
-            out_abri = QtWidgets.QLineEdit()
-            out_bbri = QtWidgets.QLineEdit()
-            out_segment_reverse = QtWidgets.QCheckBox("Reverse segment order")
-
-            lbl_controllers = QtWidgets.QLabel("Controllers")
-            lbl_rangelow = QtWidgets.QLabel("Range low")
-            lbl_rangehigh = QtWidgets.QLabel("Range high")
-            lbl_minvalue = QtWidgets.QLabel("Min value")
-            lbl_maxvalue = QtWidgets.QLabel("Max value")
-            lbl_acolor = QtWidgets.QLabel("A color")
-            lbl_abri = QtWidgets.QLabel("A brightness")
-            lbl_bcolor = QtWidgets.QLabel("B color")
-            lbl_bbri = QtWidgets.QLabel("B brightness")
-            lbl_reverse = QtWidgets.QLabel("")
-
-            output_form.addRow(lbl_controllers, out_controllers)
-            output_form.addRow(lbl_rangelow, out_rangelow)
-            output_form.addRow(lbl_rangehigh, out_rangehigh)
-            output_form.addRow(lbl_minvalue, out_minvalue)
-            output_form.addRow(lbl_maxvalue, out_maxvalue)
-            output_form.addRow(lbl_acolor, out_acolor)
-            output_form.addRow(lbl_abri, out_abri)
-            output_form.addRow(lbl_bcolor, out_bcolor)
-            output_form.addRow(lbl_bbri, out_bbri)
-            output_form.addRow(lbl_reverse, out_segment_reverse)
-            output_opts.setVisible(False)
-            form.addRow("", output_opts)
+            # Input/Output groups removed for now.
 
             buttons = QtWidgets.QDialogButtonBox(
                 QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
@@ -987,60 +918,10 @@ def _run_debug_window(
             process_popup.installEventFilter(popup_filter)
             dialog.installEventFilter(popup_filter)
 
-            def _toggle_input_opts():
-                mode = input_mode.currentText()
-                input_opts.setVisible(mode == "screen_region")
-
-            def _toggle_output_opts():
-                mode = output_mode.currentText()
-                output_opts.setVisible(mode in ("fullfade", "segmentsolid", "segmentpercent"))
-                show_range = mode == "fullfade"
-                show_minmax = mode in ("fullfade", "segmentpercent")
-                show_colors = mode in ("segmentsolid", "segmentpercent")
-                show_reverse = mode == "segmentpercent"
-
-                lbl_rangelow.setVisible(show_range)
-                out_rangelow.setVisible(show_range)
-                lbl_rangehigh.setVisible(show_range)
-                out_rangehigh.setVisible(show_range)
-
-                lbl_minvalue.setVisible(show_minmax)
-                out_minvalue.setVisible(show_minmax)
-                lbl_maxvalue.setVisible(show_minmax)
-                out_maxvalue.setVisible(show_minmax)
-
-                lbl_acolor.setVisible(show_colors)
-                out_acolor.setVisible(show_colors)
-                lbl_abri.setVisible(show_colors)
-                out_abri.setVisible(show_colors)
-                lbl_bcolor.setVisible(show_colors)
-                out_bcolor.setVisible(show_colors)
-                lbl_bbri.setVisible(show_colors)
-                out_bbri.setVisible(show_colors)
-
-                lbl_reverse.setVisible(show_reverse)
-                out_segment_reverse.setVisible(show_reverse)
-
-            input_mode.currentIndexChanged.connect(_toggle_input_opts)
-            output_mode.currentIndexChanged.connect(_toggle_output_opts)
-            _toggle_input_opts()
-            _toggle_output_opts()
-
             def _set_text(widget, value):
                 try:
                     widget.blockSignals(True)
                     widget.setText(value or "")
-                finally:
-                    widget.blockSignals(False)
-
-            def _set_combo(widget, value, default="None"):
-                try:
-                    widget.blockSignals(True)
-                    if value:
-                        idx = widget.findText(str(value))
-                        widget.setCurrentIndex(idx if idx >= 0 else widget.findText(default))
-                    else:
-                        widget.setCurrentIndex(widget.findText(default))
                 finally:
                     widget.blockSignals(False)
 
@@ -1049,56 +930,16 @@ def _run_debug_window(
                 _set_text(friendly, str(app.get("friendlyname", "")).strip())
                 procs = app.get("processes", []) or []
                 _set_text(process, str(procs[0]).strip() if procs else "")
-                modes = app.get("modes", []) or []
-                mode = modes[0] if modes else {}
-                _set_text(mode_id, str(mode.get("id", "")).strip())
-                _set_combo(input_mode, mode.get("input"))
-                _set_combo(output_mode, mode.get("output"))
-                _set_text(input_x, str(mode.get("x", "")).strip())
-                _set_text(input_y, str(mode.get("y", "")).strip())
-                _set_text(input_w, str(mode.get("width", "")).strip())
-                _set_text(input_h, str(mode.get("height", "")).strip())
-                _set_text(out_controllers, ", ".join(mode.get("controllers", []) or []))
-                _set_text(out_rangelow, str(mode.get("rangelow", "")).strip())
-                _set_text(out_rangehigh, str(mode.get("rangehigh", "")).strip())
-                _set_text(out_minvalue, str(mode.get("minvalue", "")).strip())
-                _set_text(out_maxvalue, str(mode.get("maxvalue", "")).strip())
-                _set_text(out_acolor, str(mode.get("acolor", "")).strip())
-                _set_text(out_abri, str(mode.get("abrightness", "")).strip())
-                _set_text(out_bcolor, str(mode.get("bcolor", "")).strip())
-                _set_text(out_bbri, str(mode.get("bbrightness", "")).strip())
-                out_segment_reverse.setChecked(bool(mode.get("segmentorderreverse", False)))
                 selected_app_id["value"] = str(app.get("id", "")).strip() or None
                 _dismiss_popup()
-                _toggle_input_opts()
-                _toggle_output_opts()
                 refresh_conflict()
 
             def _clear_fields():
                 _set_text(app_id, "")
                 _set_text(friendly, "")
                 _set_text(process, "")
-                _set_text(mode_id, "")
-                _set_combo(input_mode, None)
-                _set_combo(output_mode, None)
-                _set_text(input_x, "")
-                _set_text(input_y, "")
-                _set_text(input_w, "")
-                _set_text(input_h, "")
-                _set_text(out_controllers, "")
-                _set_text(out_rangelow, "")
-                _set_text(out_rangehigh, "")
-                _set_text(out_minvalue, "")
-                _set_text(out_maxvalue, "")
-                _set_text(out_acolor, "")
-                _set_text(out_abri, "")
-                _set_text(out_bcolor, "")
-                _set_text(out_bbri, "")
-                out_segment_reverse.setChecked(False)
                 selected_app_id["value"] = None
                 _dismiss_popup()
-                _toggle_input_opts()
-                _toggle_output_opts()
                 refresh_conflict()
 
             def _on_app_picker_change():
@@ -1114,24 +955,6 @@ def _run_debug_window(
             _on_app_picker_change()
 
             def on_accept():
-                def _to_int(text: str):
-                    text = text.strip()
-                    if text == "":
-                        return None
-                    try:
-                        return int(text)
-                    except Exception:
-                        return None
-
-                def _to_float(text: str):
-                    text = text.strip()
-                    if text == "":
-                        return None
-                    try:
-                        return float(text)
-                    except Exception:
-                        return None
-
                 app_id_val = app_id.text().strip()
                 proc_name = process.text().strip()
                 if not app_id_val:
@@ -1145,48 +968,13 @@ def _run_debug_window(
                     if app_id_val.lower() in existing and app_picker.currentText() == "New App":
                         QtWidgets.QMessageBox.warning(dialog, "Add Application", "That id already exists.")
                         return
-                mode_payload = None
-                input_sel = input_mode.currentText()
-                output_sel = output_mode.currentText()
-                mode_id_val = mode_id.text().strip()
-                if input_sel != "None" or output_sel != "None":
-                    if not mode_id_val:
-                        QtWidgets.QMessageBox.warning(dialog, "Add Application", "Mode id is required.")
-                        return
-                    mode_payload = {"id": mode_id_val}
-                    if input_sel != "None":
-                        mode_payload["input"] = input_sel
-                        if input_sel == "screen_region":
-                            mode_payload["x"] = _to_int(input_x.text())
-                            mode_payload["y"] = _to_int(input_y.text())
-                            mode_payload["width"] = _to_int(input_w.text())
-                            mode_payload["height"] = _to_int(input_h.text())
-                    if output_sel != "None":
-                        mode_payload["output"] = output_sel
-                        controllers = [c.strip() for c in out_controllers.text().split(",") if c.strip()]
-                        if controllers:
-                            mode_payload["controllers"] = controllers
-                        if output_sel == "fullfade":
-                            mode_payload["rangelow"] = _to_float(out_rangelow.text())
-                            mode_payload["rangehigh"] = _to_float(out_rangehigh.text())
-                            mode_payload["minvalue"] = _to_float(out_minvalue.text())
-                            mode_payload["maxvalue"] = _to_float(out_maxvalue.text())
-                        if output_sel in ("segmentsolid", "segmentpercent"):
-                            mode_payload["acolor"] = out_acolor.text().strip()
-                            mode_payload["abrightness"] = _to_int(out_abri.text())
-                            mode_payload["bcolor"] = out_bcolor.text().strip()
-                            mode_payload["bbrightness"] = _to_int(out_bbri.text())
-                        if output_sel == "segmentpercent":
-                            mode_payload["minvalue"] = _to_float(out_minvalue.text())
-                            mode_payload["maxvalue"] = _to_float(out_maxvalue.text())
-                            mode_payload["segmentorderreverse"] = out_segment_reverse.isChecked()
                 update_id = None if app_picker.currentText() == "New App" else selected_app_id["value"]
                 if _upsert_application_in_config(
                     CONFIG_PATH,
                     app_id_val,
                     [proc_name],
                     friendly.text(),
-                    mode_payload,
+                    None,
                     update_id,
                     self.append_line,
                 ):
