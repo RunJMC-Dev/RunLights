@@ -1033,7 +1033,30 @@ def _run_debug_window(
 
                 def _toggle_groups():
                     input_group.setVisible(input_mode.currentText() == "screen_region")
-                    output_group.setVisible(output_mode.currentText() != "None")
+                    out_mode = output_mode.currentText()
+                    output_group.setVisible(out_mode != "None")
+
+                    show_fullfade = out_mode == "fullfade"
+                    show_segmentsolid = out_mode == "segmentsolid"
+                    show_segmentpercent = out_mode == "segmentpercent"
+
+                    def _show(field, visible: bool):
+                        field.setVisible(visible)
+                        label = output_form.labelForField(field)
+                        if label:
+                            label.setVisible(visible)
+
+                    # Controllers and min/max always relevant for numeric outputs
+                    _show(out_controllers, out_mode != "None")
+                    _show(out_minvalue, out_mode != "None")
+                    _show(out_maxvalue, out_mode != "None")
+
+                    # Colors/brightness for segment-based outputs
+                    _show(a_color_wrap, show_segmentsolid or show_segmentpercent or show_fullfade)
+                    _show(b_color_wrap, show_segmentsolid or show_segmentpercent)
+                    _show(a_bri_wrap, show_segmentsolid or show_segmentpercent)
+                    _show(b_bri_wrap, show_segmentsolid or show_segmentpercent)
+                    _show(out_segment_reverse, show_segmentpercent)
 
                 input_mode.currentIndexChanged.connect(_toggle_groups)
                 output_mode.currentIndexChanged.connect(_toggle_groups)
