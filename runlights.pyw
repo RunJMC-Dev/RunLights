@@ -1944,6 +1944,29 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             return
         span = max(1e-9, maxv - minv)
         pct = max(0.0, min(100.0, (val_f - minv) / span * 100.0))
+        try:
+            a_color = mode.get("acolor", "#ffffff")
+            b_color = mode.get("bcolor", "#000000")
+            a_rgb = wled._hex_to_rgb(str(a_color))
+            b_rgb = wled._hex_to_rgb(str(b_color))
+        except Exception:
+            a_rgb = (255, 255, 255)
+            b_rgb = (0, 0, 0)
+        try:
+            abri = int(mode.get("abrightness", 0))
+        except Exception:
+            abri = 0
+        try:
+            bbri = int(mode.get("bbrightness", 255))
+        except Exception:
+            bbri = 255
+        t = pct / 100.0
+        mix_rgb = (
+            int(round(a_rgb[0] + (b_rgb[0] - a_rgb[0]) * t)),
+            int(round(a_rgb[1] + (b_rgb[1] - a_rgb[1]) * t)),
+            int(round(a_rgb[2] + (b_rgb[2] - a_rgb[2]) * t)),
+        )
+        mix_bri = int(round(abri + (bbri - abri) * t))
         for controller_id in controllers_filter:
             ctrl = _lookup_controller(cfg_raw, controller_id) if controller_id else None
             if not ctrl:
@@ -1952,11 +1975,13 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             host = ctrl.get("host")
             port = int(ctrl.get("port", 80))
             try:
-                wled.apply_fullfade(
+                wled.send_simple(
                     host=host,
                     port=port,
-                    color_hex=color,
-                    health_pct=pct,
+                    on=mix_bri > 0,
+                    brightness=mix_bri,
+                    color=f"#{mix_rgb[0]:02x}{mix_rgb[1]:02x}{mix_rgb[2]:02x}",
+                    segment=None,
                     transition_ms=transition,
                     timeout=_wled_timeout(cfg_raw),
                 )
