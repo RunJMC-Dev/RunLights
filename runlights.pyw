@@ -1858,7 +1858,7 @@ def _apply_ocr_delimiter(mode: dict, text: str, log_message=None) -> str:
 
 def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
     output_type = mode.get("output")
-    color = mode.get("color", "#ffffff")
+    color = mode.get("color") or mode.get("acolor") or mode.get("bcolor") or "#ffffff"
     transition = cfg_raw.get("default_transition_ms")
 
     if output_type == "fullfade":
