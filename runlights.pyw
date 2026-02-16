@@ -727,6 +727,8 @@ def _run_debug_window(
             dialog = QtWidgets.QDialog(self)
             dialog.setWindowTitle("App Config")
             dialog.setModal(True)
+            dialog.setMinimumWidth(700)
+            dialog.resize(700, 520)
 
             form = QtWidgets.QFormLayout(dialog)
             form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
@@ -754,7 +756,7 @@ def _run_debug_window(
             conflict_label.setStyleSheet("color: #c62828;")
 
             app_picker = QtWidgets.QComboBox()
-            app_picker.addItem("New App")
+            app_picker.addItem("New App", None)
             apps_by_id = {}
             friendly_to_id = {}
             if cfg_raw_global:
@@ -766,13 +768,14 @@ def _run_debug_window(
                     fname = str(app.get("friendlyname", "")).strip()
                     if fname:
                         friendly_to_id[fname.lower()] = app_id_val
-                    app_picker.addItem(app_id_val)
+                    label = f"{app_id_val} — {fname}" if fname else app_id_val
+                    app_picker.addItem(label, app_id_val)
 
             form.addRow(_section_label("Application"), QtWidgets.QLabel(""))
             form.addRow("Select app", app_picker)
             form.addRow("Id", app_id)
+            form.addRow("Status", conflict_label)
             form.addRow("Friendly name", friendly)
-            form.addRow("", conflict_label)
             form.addRow("Process", process)
             form.addRow(_section_line(), QtWidgets.QLabel(""))
 
@@ -794,7 +797,7 @@ def _run_debug_window(
                 msg = ""
                 app_id_val = app_id.text().strip().lower()
                 friendly_val = friendly.text().strip().lower()
-                is_new = app_picker.currentText() == "New App"
+                is_new = app_picker.currentData() is None
                 current_id = selected_app_id["value"]
                 if app_id_val and app_id_val in existing_ids:
                     if is_new or (current_id and app_id_val != current_id.lower()):
@@ -943,11 +946,11 @@ def _run_debug_window(
                 refresh_conflict()
 
             def _on_app_picker_change():
-                name = app_picker.currentText()
-                if name == "New App":
+                app_key = app_picker.currentData()
+                if app_key is None:
                     _clear_fields()
                 else:
-                    app = apps_by_id.get(name)
+                    app = apps_by_id.get(app_key)
                     if app:
                         _populate_from_app(app)
 
@@ -965,10 +968,10 @@ def _run_debug_window(
                     return
                 if cfg_raw_global:
                     existing = {str(a.get("id", "")).lower() for a in cfg_raw_global.get("application", [])}
-                    if app_id_val.lower() in existing and app_picker.currentText() == "New App":
+                    if app_id_val.lower() in existing and app_picker.currentData() is None:
                         QtWidgets.QMessageBox.warning(dialog, "Add Application", "That id already exists.")
                         return
-                update_id = None if app_picker.currentText() == "New App" else selected_app_id["value"]
+                update_id = None if app_picker.currentData() is None else selected_app_id["value"]
                 if _upsert_application_in_config(
                     CONFIG_PATH,
                     app_id_val,
