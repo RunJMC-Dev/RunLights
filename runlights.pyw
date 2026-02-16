@@ -956,10 +956,13 @@ def _run_debug_window(
                         cid = str(ctrl.get("id", "")).strip()
                         if cid:
                             controller_ids.append(cid)
-                out_controllers = QtWidgets.QComboBox()
-                out_controllers.addItem("")
+                out_controllers = QtWidgets.QListWidget()
+                out_controllers.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
                 for cid in controller_ids:
-                    out_controllers.addItem(cid)
+                    item = QtWidgets.QListWidgetItem(cid)
+                    item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+                    item.setCheckState(QtCore.Qt.Unchecked)
+                    out_controllers.addItem(item)
                 out_minvalue = QtWidgets.QLineEdit()
                 out_maxvalue = QtWidgets.QLineEdit()
                 out_acolor = QtWidgets.QLineEdit()
@@ -1092,11 +1095,11 @@ def _run_debug_window(
                     input_h.setText(str(existing.get("height", "")).strip())
                     input_min.setText(str(existing.get("inputrangemin", "")).strip())
                     input_max.setText(str(existing.get("inputrangemax", "")).strip())
-                    existing_controllers = existing.get("controllers", []) or []
-                    if existing_controllers:
-                        idx = out_controllers.findText(str(existing_controllers[0]))
-                        if idx >= 0:
-                            out_controllers.setCurrentIndex(idx)
+                    existing_controllers = set(str(c) for c in (existing.get("controllers", []) or []))
+                    for i in range(out_controllers.count()):
+                        item = out_controllers.item(i)
+                        if item and item.text() in existing_controllers:
+                            item.setCheckState(QtCore.Qt.Checked)
                     out_minvalue.setText(str(existing.get("minvalue", "")).strip())
                     out_maxvalue.setText(str(existing.get("maxvalue", "")).strip())
                     out_acolor.setText(str(existing.get("acolor", "")).strip())
@@ -1128,9 +1131,13 @@ def _run_debug_window(
                             result["inputrangemax"] = _to_float(input_max.text())
                     if output_sel != "None":
                         result["output"] = output_sel
-                        controller_val = out_controllers.currentText().strip()
-                        if controller_val:
-                            result["controllers"] = [controller_val]
+                        controllers = []
+                        for i in range(out_controllers.count()):
+                            item = out_controllers.item(i)
+                            if item and item.checkState() == QtCore.Qt.Checked:
+                                controllers.append(item.text())
+                        if controllers:
+                            result["controllers"] = controllers
                         result["minvalue"] = _to_float(out_minvalue.text())
                         result["maxvalue"] = _to_float(out_maxvalue.text())
                         result["acolor"] = out_acolor.text().strip()
