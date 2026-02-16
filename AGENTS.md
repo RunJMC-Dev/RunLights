@@ -28,4 +28,5 @@
 ## Agent Policies
 - No restricted tasks currently.
 - Always commit to GitHub after changes.
+- Immediately push all commits to GitHub.
 - Update `README.md` when making changes.
