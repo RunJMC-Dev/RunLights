@@ -2520,6 +2520,7 @@ def _apply_idle(cfg_raw: dict, log_message):
 
 
 def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message):
+    global CURRENT_APP_ID
     watch: dict[str, str] = {}
     for app in cfg_raw.get("application", []):
         for name in app.get("processes", []):
@@ -2556,7 +2557,6 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                 # Switch active app
                 if started_apps:
                     active_app = sorted(started_apps)[0]
-                    global CURRENT_APP_ID
                     CURRENT_APP_ID = active_app
                     if not stored_presets:
                         stored_presets = _apply_global_gaming_preset(cfg_raw, gaming_preset, log_message)
@@ -2569,7 +2569,6 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                 elif stopped_apps:
                     if active_app in stopped_apps or not current:
                         active_app = None
-                        global CURRENT_APP_ID
                         CURRENT_APP_ID = None
                         _restore_presets(cfg_raw, stored_presets, log_message)
                         if cfg_raw.get("idle"):
