@@ -1780,7 +1780,6 @@ def _reload_config(log_message):
         cfg = load_config(CONFIG_PATH)
         cfg_raw_global = cfg.raw
         log_message(f"Config reloaded: {cfg.path.resolve()}")
-        log_message("Note: running threads use startup config; restart app to fully apply.")
         return cfg.raw
     except Exception as exc:
         log_message(f"Config reload failed: {exc}")
