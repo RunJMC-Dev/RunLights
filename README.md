@@ -65,6 +65,7 @@ Outputs
 - Add GUI tray app with quick actions.
 - Implement CLI parity with GUI actions.
 - Packaging/distribution (installer? pip package?).
+- Context-aware behavior: detect foreground window/app focus and adapt lighting based on the active app.
 
 ## License
 TBD.
