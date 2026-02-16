@@ -2623,7 +2623,7 @@ def _apply_input_range(mode: dict, value: float | None, log_message=None) -> flo
         min_f = float(min_v) if min_v is not None and str(min_v).strip() != "" else None
         max_f = float(max_v) if max_v is not None and str(max_v).strip() != "" else None
         if min_f is None or max_f is None:
-            return value
+            min_f, max_f = 0.0, 100.0
         if max_f <= min_f:
             if log_message:
                 log_message("Invalid input range: inputrangemax <= inputrangemin")
