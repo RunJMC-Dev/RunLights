@@ -260,6 +260,9 @@ def _run_debug_window(
             appconfig_btn = QtWidgets.QPushButton("App Config")
             appconfig_btn.clicked.connect(lambda _=None: self._show_app_config_dialog())
             sidebar_layout.addWidget(appconfig_btn)
+            restart_btn = QtWidgets.QPushButton("Restart")
+            restart_btn.clicked.connect(lambda _=None: _restart_runlights_from_debug(self))
+            sidebar_layout.addWidget(restart_btn)
             sidebar_layout.addStretch(1)
 
             main = QtWidgets.QWidget(central)
@@ -1788,6 +1791,66 @@ def _reload_config(log_message):
     except Exception as exc:
         log_message(f"Config reload failed: {exc}")
         return None
+
+
+def _restart_runlights_from_debug(window=None):
+    try:
+        if window:
+            try:
+                window.append_line("Restarting RunLights...")
+            except Exception:
+                pass
+        _restart_runlights()
+    except Exception:
+        if window:
+            try:
+                window.append_line("Restart failed.")
+            except Exception:
+                pass
+
+
+def _restart_runlights():
+    """Best-effort restart by terminating runlights.pyw and re-launching."""
+    if psutil is None:
+        return
+    procs = []
+    try:
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            cmdline = " ".join(proc.info.get("cmdline") or []).lower()
+            if "runlights.pyw" in cmdline:
+                procs.append(proc)
+    except Exception:
+        return
+    for proc in procs:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    for proc in procs:
+        try:
+            proc.wait(timeout=3)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    try:
+        import subprocess
+
+        exe = Path(sys.executable)
+        if exe.name.lower() == "python.exe":
+            candidate = exe.with_name("pythonw.exe")
+            if candidate.exists():
+                exe = candidate
+        subprocess.Popen(
+            [str(exe), str(Path(__file__).resolve())],
+            cwd=str(Path(__file__).resolve().parent),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+        )
+    except Exception:
+        return
 
 
 def _toml_escape(value: str) -> str:
