@@ -1977,16 +1977,38 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             host = ctrl.get("host")
             port = int(ctrl.get("port", 80))
             try:
-                wled.send_simple(
-                    host=host,
-                    port=port,
-                    on=mix_bri > 0,
-                    brightness=mix_bri,
-                    color=f"#{mix_rgb[0]:02x}{mix_rgb[1]:02x}{mix_rgb[2]:02x}",
-                    segment=None,
-                    transition_ms=transition,
-                    timeout=_wled_timeout(cfg_raw),
-                )
+                segments = ctrl.get("segments", []) or []
+                if segments:
+                    seg_updates = []
+                    for seg in segments:
+                        seg_id = seg.get("id")
+                        if seg_id is None:
+                            continue
+                        seg_updates.append(
+                            wled.WLEDPayload(
+                                on=mix_bri > 0,
+                                brightness=mix_bri,
+                                color=mix_rgb,
+                                segment=seg_id,
+                            )
+                        )
+                    wled.send_batch(
+                        controller=wled.WLEDController(host=host, port=port),
+                        seg_updates=seg_updates,
+                        transition_ms=transition,
+                        timeout=_wled_timeout(cfg_raw),
+                    )
+                else:
+                    wled.send_simple(
+                        host=host,
+                        port=port,
+                        on=mix_bri > 0,
+                        brightness=mix_bri,
+                        color=f"#{mix_rgb[0]:02x}{mix_rgb[1]:02x}{mix_rgb[2]:02x}",
+                        segment=None,
+                        transition_ms=transition,
+                        timeout=_wled_timeout(cfg_raw),
+                    )
                 log_message(f"Applied {output_type} {value} -> {pct:.0f}% on {controller_id}")
             except Exception as exc:
                 log_message(f"WLED error: {exc}")
