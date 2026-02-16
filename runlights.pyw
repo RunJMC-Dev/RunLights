@@ -2789,6 +2789,13 @@ def _ocr_poll_loop(
     if psutil is None:
         log_message("OCR disabled: psutil not installed (process detection)")
         return
+    try:
+        import win32gui  # type: ignore
+        import win32process  # type: ignore
+    except Exception:
+        win32gui = None
+        win32process = None
+    watch = {name.lower(): app.get("id") for app in cfg_raw.get("application", []) for name in app.get("processes", []) if isinstance(name, str)}
     log_message(f"OCR active for {len(entries)} mode(s)")
     try:
         while not stop_event.is_set():
@@ -2802,6 +2809,17 @@ def _ocr_poll_loop(
                 entry["next"] = now + entry["interval"]
                 if not _process_running(entry["processes"]):
                     continue
+                if win32gui and win32process:
+                    try:
+                        hwnd = win32gui.GetForegroundWindow()
+                        if hwnd:
+                            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                            proc_name = (psutil.Process(pid).name() or "").lower()
+                            fg_app = watch.get(proc_name)
+                            if fg_app != entry["app_id"]:
+                                continue
+                    except Exception:
+                        pass
                 text, err, _ = _perform_ocr(entry["region"], mode=entry["mode"])
                 if err:
                     log_message(f"OCR {entry['app_id']}.{entry['mode_id']}: {err}")
