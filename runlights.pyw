@@ -1000,14 +1000,23 @@ def _run_debug_window(
                 b_bri_layout.addWidget(out_bbri, stretch=1)
                 b_bri_layout.addWidget(b_bri_label)
                 out_segment_reverse = QtWidgets.QCheckBox("Reverse segment order")
-                output_form.addRow("Controllers", out_controllers)
-                output_form.addRow("Min value", out_minvalue)
-                output_form.addRow("Max value", out_maxvalue)
-                output_form.addRow("A color", a_color_wrap)
-                output_form.addRow("A brightness", a_bri_wrap)
-                output_form.addRow("B color", b_color_wrap)
-                output_form.addRow("B brightness", b_bri_wrap)
-                output_form.addRow("", out_segment_reverse)
+                lbl_controllers = QtWidgets.QLabel("Controllers")
+                lbl_minvalue = QtWidgets.QLabel("Min value")
+                lbl_maxvalue = QtWidgets.QLabel("Max value")
+                lbl_acolor = QtWidgets.QLabel("A color")
+                lbl_abri = QtWidgets.QLabel("A brightness")
+                lbl_bcolor = QtWidgets.QLabel("B color")
+                lbl_bbri = QtWidgets.QLabel("B brightness")
+                lbl_reverse = QtWidgets.QLabel("")
+
+                output_form.addRow(lbl_controllers, out_controllers)
+                output_form.addRow(lbl_minvalue, out_minvalue)
+                output_form.addRow(lbl_maxvalue, out_maxvalue)
+                output_form.addRow(lbl_acolor, a_color_wrap)
+                output_form.addRow(lbl_abri, a_bri_wrap)
+                output_form.addRow(lbl_bcolor, b_color_wrap)
+                output_form.addRow(lbl_bbri, b_bri_wrap)
+                output_form.addRow(lbl_reverse, out_segment_reverse)
                 form.addRow("", output_group)
 
                 status = QtWidgets.QLabel("")
@@ -1046,16 +1055,28 @@ def _run_debug_window(
                         if label:
                             label.setVisible(visible)
 
-                    # Controllers and min/max always relevant for numeric outputs
+                    # Controllers always relevant when output selected
                     _show(out_controllers, out_mode != "None")
+
+                    # Min/Max labels for fullfade are brightness
+                    if show_fullfade:
+                        lbl_minvalue.setText("Min brightness")
+                        lbl_maxvalue.setText("Max brightness")
+                    else:
+                        lbl_minvalue.setText("Min value")
+                        lbl_maxvalue.setText("Max value")
+
+                    # Min/Max shown for numeric outputs
                     _show(out_minvalue, out_mode != "None")
                     _show(out_maxvalue, out_mode != "None")
 
-                    # Colors/brightness for segment-based outputs
-                    _show(a_color_wrap, show_segmentsolid or show_segmentpercent or show_fullfade)
-                    _show(b_color_wrap, show_segmentsolid or show_segmentpercent)
-                    _show(a_bri_wrap, show_segmentsolid or show_segmentpercent)
-                    _show(b_bri_wrap, show_segmentsolid or show_segmentpercent)
+                    # Colors/brightness:
+                    _show(a_color_wrap, show_fullfade or show_segmentsolid or show_segmentpercent)
+                    _show(b_color_wrap, show_fullfade or show_segmentsolid or show_segmentpercent)
+                    _show(a_bri_wrap, show_fullfade or show_segmentsolid or show_segmentpercent)
+                    _show(b_bri_wrap, show_fullfade or show_segmentsolid or show_segmentpercent)
+
+                    # Reverse only for segmentpercent
                     _show(out_segment_reverse, show_segmentpercent)
 
                 input_mode.currentIndexChanged.connect(_toggle_groups)
