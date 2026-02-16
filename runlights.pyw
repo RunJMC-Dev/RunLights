@@ -20,6 +20,7 @@ os.chdir(_here)
 sys.path.insert(0, str(_here / "src"))
 
 PAUSE_EVENT = threading.Event()
+CURRENT_APP_ID: str | None = None
 
 from runlights.tray import serve_in_thread  # noqa: E402
 from runlights.ipc import PIPE_NAME  # noqa: E402
@@ -265,6 +266,11 @@ def _run_debug_window(
             sidebar_layout.addWidget(restart_btn)
             sidebar_layout.addStretch(1)
 
+            current_app_label = QtWidgets.QLabel("Current: (none)")
+            current_app_label.setStyleSheet("color: #9aa0a6;")
+            current_app_label.setWordWrap(True)
+            sidebar_layout.addWidget(current_app_label)
+
             main = QtWidgets.QWidget(central)
             layout = QtWidgets.QVBoxLayout(main)
             layout.setContentsMargins(0, 0, 0, 0)
@@ -385,6 +391,19 @@ def _run_debug_window(
             root_layout.addWidget(sidebar)
             root_layout.addWidget(main, stretch=1)
             self.setCentralWidget(central)
+
+            def _update_current_app():
+                try:
+                    name = CURRENT_APP_ID or "(none)"
+                    current_app_label.setText(f"Current: {name}")
+                except Exception:
+                    pass
+
+            self._current_app_timer = QtCore.QTimer(self)
+            self._current_app_timer.setInterval(500)
+            self._current_app_timer.timeout.connect(_update_current_app)
+            self._current_app_timer.start()
+            _update_current_app()
 
             # Start with some spacing at the top for readability.
             self.log_box.setPlainText("\n" * 10)
@@ -2537,6 +2556,8 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                 # Switch active app
                 if started_apps:
                     active_app = sorted(started_apps)[0]
+                    global CURRENT_APP_ID
+                    CURRENT_APP_ID = active_app
                     if not stored_presets:
                         stored_presets = _apply_global_gaming_preset(cfg_raw, gaming_preset, log_message)
                     # Apply base output for first mode
@@ -2548,6 +2569,8 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                 elif stopped_apps:
                     if active_app in stopped_apps or not current:
                         active_app = None
+                        global CURRENT_APP_ID
+                        CURRENT_APP_ID = None
                         _restore_presets(cfg_raw, stored_presets, log_message)
                         if cfg_raw.get("idle"):
                             _apply_idle(cfg_raw, log_message)
