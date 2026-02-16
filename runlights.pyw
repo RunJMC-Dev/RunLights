@@ -902,6 +902,7 @@ def _run_debug_window(
                 dlg = QtWidgets.QDialog(dialog)
                 dlg.setWindowTitle("Mode")
                 dlg.setModal(True)
+                dlg.resize(400, 600)
                 form = QtWidgets.QFormLayout(dlg)
                 form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
 
