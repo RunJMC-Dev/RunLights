@@ -725,7 +725,7 @@ def _run_debug_window(
 
         def _show_app_config_dialog(self):
             dialog = QtWidgets.QDialog(self)
-            dialog.setWindowTitle("Add Application")
+            dialog.setWindowTitle("App Config")
             dialog.setModal(True)
 
             form = QtWidgets.QFormLayout(dialog)
@@ -756,12 +756,16 @@ def _run_debug_window(
             app_picker = QtWidgets.QComboBox()
             app_picker.addItem("New App")
             apps_by_id = {}
+            friendly_to_id = {}
             if cfg_raw_global:
                 for app in cfg_raw_global.get("application", []):
                     app_id_val = str(app.get("id", "")).strip()
                     if not app_id_val:
                         continue
                     apps_by_id[app_id_val] = app
+                    fname = str(app.get("friendlyname", "")).strip()
+                    if fname:
+                        friendly_to_id[fname.lower()] = app_id_val
                     app_picker.addItem(app_id_val)
 
             form.addRow(_section_label("Application"), QtWidgets.QLabel(""))
@@ -849,22 +853,25 @@ def _run_debug_window(
             form.addRow(buttons)
 
             existing_ids = set()
-            existing_friendly = set()
             if cfg_raw_global:
                 for app in cfg_raw_global.get("application", []):
                     existing_ids.add(str(app.get("id", "")).lower())
-                    fname = str(app.get("friendlyname", "")).strip()
-                    if fname:
-                        existing_friendly.add(fname.lower())
+
+            selected_app_id = {"value": None}
 
             def refresh_conflict():
                 msg = ""
                 app_id_val = app_id.text().strip().lower()
                 friendly_val = friendly.text().strip().lower()
+                is_new = app_picker.currentText() == "New App"
+                current_id = selected_app_id["value"]
                 if app_id_val and app_id_val in existing_ids:
-                    msg = f"Id '{app_id_val}' already exists."
-                elif friendly_val and friendly_val in existing_friendly:
-                    msg = f"Friendly name '{friendly.text().strip()}' already exists."
+                    if is_new or (current_id and app_id_val != current_id.lower()):
+                        msg = f"Id '{app_id_val}' already exists."
+                if not msg and friendly_val:
+                    owner = friendly_to_id.get(friendly_val)
+                    if owner and (is_new or (current_id and owner != current_id)):
+                        msg = f"Friendly name '{friendly.text().strip()}' already exists."
                 conflict_label.setText(msg)
                 ok_btn = buttons.button(QtWidgets.QDialogButtonBox.Ok)
                 if ok_btn:
@@ -1061,6 +1068,7 @@ def _run_debug_window(
                 _set_text(out_bcolor, str(mode.get("bcolor", "")).strip())
                 _set_text(out_bbri, str(mode.get("bbrightness", "")).strip())
                 out_segment_reverse.setChecked(bool(mode.get("segmentorderreverse", False)))
+                selected_app_id["value"] = str(app.get("id", "")).strip() or None
                 _dismiss_popup()
                 _toggle_input_opts()
                 _toggle_output_opts()
@@ -1087,6 +1095,7 @@ def _run_debug_window(
                 _set_text(out_bcolor, "")
                 _set_text(out_bbri, "")
                 out_segment_reverse.setChecked(False)
+                selected_app_id["value"] = None
                 _dismiss_popup()
                 _toggle_input_opts()
                 _toggle_output_opts()
@@ -1133,7 +1142,7 @@ def _run_debug_window(
                     return
                 if cfg_raw_global:
                     existing = {str(a.get("id", "")).lower() for a in cfg_raw_global.get("application", [])}
-                    if app_id_val.lower() in existing:
+                    if app_id_val.lower() in existing and app_picker.currentText() == "New App":
                         QtWidgets.QMessageBox.warning(dialog, "Add Application", "That id already exists.")
                         return
                 mode_payload = None
@@ -1171,15 +1180,18 @@ def _run_debug_window(
                             mode_payload["minvalue"] = _to_float(out_minvalue.text())
                             mode_payload["maxvalue"] = _to_float(out_maxvalue.text())
                             mode_payload["segmentorderreverse"] = out_segment_reverse.isChecked()
-                if _append_application_to_config(
+                update_id = None if app_picker.currentText() == "New App" else selected_app_id["value"]
+                if _upsert_application_in_config(
                     CONFIG_PATH,
                     app_id_val,
                     [proc_name],
                     friendly.text(),
                     mode_payload,
+                    update_id,
                     self.append_line,
                 ):
-                    self.append_line(f"Added application '{app_id_val}' to config.toml")
+                    action = "Added" if app_picker.currentText() == "New App" else "Updated"
+                    self.append_line(f"{action} application '{app_id_val}' in config.toml")
                     new_cfg = _reload_config(self.append_line)
                     if new_cfg is not None:
                         self._build_completer()
@@ -1398,30 +1410,12 @@ def _toml_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("\"", "\\\"")
 
 
-def _append_application_to_config(
-    config_path: Path,
+def _render_application_block(
     app_id: str,
     processes: list[str],
     friendlyname: str | None,
     mode: dict | None,
-    log_message,
-) -> bool:
-    if not config_path.exists():
-        log_message(f"Config file not found: {config_path}")
-        return False
-    app_id = app_id.strip()
-    if not app_id:
-        log_message("App id is required")
-        return False
-    processes = [p.strip() for p in processes if p.strip()]
-    if not processes:
-        log_message("At least one process name is required")
-        return False
-    if cfg_raw_global:
-        existing = {str(a.get("id", "")).lower() for a in cfg_raw_global.get("application", [])}
-        if app_id.lower() in existing:
-            log_message(f"Application '{app_id}' already exists")
-            return False
+) -> list[str]:
     safe_id = _toml_escape(app_id)
     safe_name = _toml_escape(friendlyname.strip()) if friendlyname and friendlyname.strip() else ""
     proc_list = ", ".join(f"\"{_toml_escape(p)}\"" for p in processes)
@@ -1455,8 +1449,70 @@ def _append_application_to_config(
             else:
                 lines.append(f"  {key} = \"{_toml_escape(str(value))}\"")
     lines.append("")
+    return lines
+
+
+def _find_application_block(lines: list[str], target_id: str) -> tuple[int, int] | None:
+    start = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "[[application]]":
+            start = idx
+            end = len(lines)
+            for j in range(idx + 1, len(lines)):
+                if lines[j].strip() == "[[application]]":
+                    end = j
+                    break
+            block = lines[idx:end]
+            for bl in block:
+                m = re.match(r'^\s*id\s*=\s*"([^"]+)"\s*$', bl)
+                if m and m.group(1) == target_id:
+                    return idx, end
+            start = None
+    return None
+
+
+def _upsert_application_in_config(
+    config_path: Path,
+    app_id: str,
+    processes: list[str],
+    friendlyname: str | None,
+    mode: dict | None,
+    update_id: str | None,
+    log_message,
+) -> bool:
+    if not config_path.exists():
+        log_message(f"Config file not found: {config_path}")
+        return False
+    app_id = app_id.strip()
+    if not app_id:
+        log_message("App id is required")
+        return False
+    processes = [p.strip() for p in processes if p.strip()]
+    if not processes:
+        log_message("At least one process name is required")
+        return False
+    if cfg_raw_global:
+        existing = {str(a.get("id", "")).lower() for a in cfg_raw_global.get("application", [])}
+        if app_id.lower() in existing:
+            log_message(f"Application '{app_id}' already exists")
+            return False
+    block_lines = _render_application_block(app_id, processes, friendlyname, mode)
     try:
-        config_path.write_text(config_path.read_text(encoding="utf-8") + "\n".join(lines), encoding="utf-8")
+        raw = config_path.read_text(encoding="utf-8")
+        lines = raw.splitlines()
+        if update_id:
+            found = _find_application_block(lines, update_id)
+            if found:
+                start, end = found
+                lines[start:end] = block_lines[1:]  # drop leading blank for replacement
+            else:
+                lines.extend(block_lines)
+        else:
+            lines.extend(block_lines)
+        out = "\n".join(lines)
+        if raw.endswith("\n"):
+            out += "\n"
+        config_path.write_text(out, encoding="utf-8")
         return True
     except Exception as exc:
         log_message(f"Failed to write config: {exc}")
