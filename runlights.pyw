@@ -1087,6 +1087,8 @@ def _run_debug_window(
                 input_mode.currentIndexChanged.connect(_toggle_groups)
                 output_mode.currentIndexChanged.connect(_toggle_groups)
 
+                new_mode_defaults = existing is None
+
                 if existing:
                     mode_id.setText(str(existing.get("id", "")).strip())
                     _set_combo(input_mode, existing.get("input"))
@@ -1125,6 +1127,15 @@ def _run_debug_window(
                     out_bbri.setValue(255)
 
                 _toggle_groups()
+
+                def _apply_output_defaults():
+                    if not new_mode_defaults:
+                        return
+                    if output_mode.currentText() == "fade":
+                        out_abri.setValue(0)
+
+                output_mode.currentIndexChanged.connect(lambda _=None: _apply_output_defaults())
+                _apply_output_defaults()
 
                 def _collect_mode_for_test():
                     result = {"id": mode_id.text().strip() or "test"}
