@@ -774,17 +774,24 @@ def _run_debug_window(
             form.addRow(_section_label("Application"), QtWidgets.QLabel(""))
             form.addRow("Select app", app_picker)
             form.addRow("Id", app_id)
-            form.addRow("Status", conflict_label)
             form.addRow("Friendly name", friendly)
             form.addRow("Process", process)
             form.addRow(_section_line(), QtWidgets.QLabel(""))
 
-            # Input/Output groups removed for now.
+            form.addRow(_section_label("Modes"), QtWidgets.QLabel(""))
+            modes_wrap = QtWidgets.QWidget(dialog)
+            modes_layout = QtWidgets.QVBoxLayout(modes_wrap)
+            modes_layout.setContentsMargins(0, 0, 0, 0)
+            modes_layout.setSpacing(6)
+            form.addRow("", modes_wrap)
 
             buttons = QtWidgets.QDialogButtonBox(
                 QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
             )
             form.addRow(buttons)
+            # Status row (hidden unless needed)
+            form.addRow("", conflict_label)
+            conflict_label.setVisible(False)
 
             existing_ids = set()
             if cfg_raw_global:
@@ -792,6 +799,89 @@ def _run_debug_window(
                     existing_ids.add(str(app.get("id", "")).lower())
 
             selected_app_id = {"value": None}
+
+            def _mdi_icon(name: str) -> QtGui.QIcon:
+                svg_map = {
+                    "edit": (
+                        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\">"
+                        "<path fill=\"#cfd8dc\" d=\"M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm2.92"
+                        " 2.33H5v-.92l9.06-9.06.92.92-9.06 9.06zM20.71 7.04a1.003"
+                        " 1.003 0 000-1.42l-2.34-2.34a1.003 1.003 0 00-1.42 0l-1.83"
+                        " 1.83 3.75 3.75 1.84-1.82z\"/>"
+                        "</svg>"
+                    ),
+                    "delete": (
+                        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\">"
+                        "<path fill=\"#cfd8dc\" d=\"M9 3v1H4v2h16V4h-5V3H9m2 4v11h2V7h-2m-4"
+                        " 0v11h2V7H7m8 0v11h2V7h-2z\"/>"
+                        "</svg>"
+                    ),
+                }
+                svg = svg_map.get(name)
+                if not svg:
+                    return QtGui.QIcon()
+                try:
+                    from PySide6 import QtSvg  # type: ignore
+
+                    renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(svg.encode("utf-8")))
+                    image = QtGui.QImage(24, 24, QtGui.QImage.Format_ARGB32)
+                    image.fill(QtCore.Qt.transparent)
+                    painter = QtGui.QPainter(image)
+                    renderer.render(painter)
+                    painter.end()
+                    return QtGui.QIcon(QtGui.QPixmap.fromImage(image))
+                except Exception:
+                    return QtGui.QIcon()
+
+            edit_icon = _mdi_icon("edit")
+            delete_icon = _mdi_icon("delete")
+
+            def _clear_modes():
+                while modes_layout.count():
+                    item = modes_layout.takeAt(0)
+                    w = item.widget()
+                    if w:
+                        w.deleteLater()
+
+            def _render_modes(app):
+                _clear_modes()
+                modes = app.get("modes", []) if app else []
+                if not modes:
+                    label = QtWidgets.QLabel("No modes configured.")
+                    label.setStyleSheet("color: #9aa0a6;")
+                    modes_layout.addWidget(label)
+                    return
+                for mode in modes:
+                    mode_id = str(mode.get("id", "")).strip() or "(unnamed)"
+                    input_id = str(mode.get("input", "none")).strip() or "none"
+                    output_id = str(mode.get("output", "none")).strip() or "none"
+                    row = QtWidgets.QWidget(modes_wrap)
+                    row_layout = QtWidgets.QHBoxLayout(row)
+                    row_layout.setContentsMargins(0, 0, 0, 0)
+                    row_layout.setSpacing(8)
+                    label = QtWidgets.QLabel(f"{mode_id}: {input_id} -> {output_id}")
+                    label.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+                    row_layout.addWidget(label)
+
+                    edit_btn = QtWidgets.QToolButton(row)
+                    edit_btn.setToolTip("Edit mode (coming soon)")
+                    if not edit_icon.isNull():
+                        edit_btn.setIcon(edit_icon)
+                    else:
+                        edit_btn.setText("Edit")
+                    edit_btn.setEnabled(False)
+
+                    del_btn = QtWidgets.QToolButton(row)
+                    del_btn.setToolTip("Delete mode (coming soon)")
+                    if not delete_icon.isNull():
+                        del_btn.setIcon(delete_icon)
+                    else:
+                        del_btn.setText("Delete")
+                    del_btn.setEnabled(False)
+
+                    row_layout.addWidget(edit_btn)
+                    row_layout.addWidget(del_btn)
+                    modes_layout.addWidget(row)
 
             def refresh_conflict():
                 msg = ""
@@ -807,6 +897,7 @@ def _run_debug_window(
                     if owner and (is_new or (current_id and owner != current_id)):
                         msg = f"Friendly name '{friendly.text().strip()}' already exists."
                 conflict_label.setText(msg)
+                conflict_label.setVisible(bool(msg))
                 ok_btn = buttons.button(QtWidgets.QDialogButtonBox.Ok)
                 if ok_btn:
                     ok_btn.setEnabled(bool(app_id.text().strip()) and bool(process.text().strip()) and not msg)
@@ -935,6 +1026,7 @@ def _run_debug_window(
                 _set_text(process, str(procs[0]).strip() if procs else "")
                 selected_app_id["value"] = str(app.get("id", "")).strip() or None
                 _dismiss_popup()
+                _render_modes(app)
                 refresh_conflict()
 
             def _clear_fields():
@@ -943,6 +1035,7 @@ def _run_debug_window(
                 _set_text(process, "")
                 selected_app_id["value"] = None
                 _dismiss_popup()
+                _render_modes(None)
                 refresh_conflict()
 
             def _on_app_picker_change():
