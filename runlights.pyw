@@ -761,9 +761,75 @@ def _run_debug_window(
             form.addRow(_section_line(), QtWidgets.QLabel(""))
 
             form.addRow(_section_label("Input"), QtWidgets.QLabel(""))
+            input_mode = QtWidgets.QComboBox()
+            input_mode.addItems(["None", "screen_region", "CLI"])
+            form.addRow("Mode", input_mode)
+            input_opts = QtWidgets.QWidget(dialog)
+            input_form = QtWidgets.QFormLayout(input_opts)
+            input_form.setContentsMargins(0, 0, 0, 0)
+            input_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+            input_x = QtWidgets.QLineEdit()
+            input_y = QtWidgets.QLineEdit()
+            input_w = QtWidgets.QLineEdit()
+            input_h = QtWidgets.QLineEdit()
+            for w in (input_x, input_y, input_w, input_h):
+                w.setPlaceholderText("0")
+            input_form.addRow("X", input_x)
+            input_form.addRow("Y", input_y)
+            input_form.addRow("Width", input_w)
+            input_form.addRow("Height", input_h)
+            input_opts.setVisible(False)
+            form.addRow("", input_opts)
             form.addRow(_section_line(), QtWidgets.QLabel(""))
 
             form.addRow(_section_label("Output"), QtWidgets.QLabel(""))
+            mode_id = QtWidgets.QLineEdit()
+            mode_id.setPlaceholderText("e.g. health")
+            output_mode = QtWidgets.QComboBox()
+            output_mode.addItems(["None", "fullfade", "segmentsolid", "segmentpercent"])
+            form.addRow("Mode id", mode_id)
+            form.addRow("Mode", output_mode)
+
+            output_opts = QtWidgets.QWidget(dialog)
+            output_form = QtWidgets.QFormLayout(output_opts)
+            output_form.setContentsMargins(0, 0, 0, 0)
+            output_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+            out_controllers = QtWidgets.QLineEdit()
+            out_controllers.setPlaceholderText("e.g. PCROOMLHS, PCROOMRHS")
+            out_rangelow = QtWidgets.QLineEdit()
+            out_rangehigh = QtWidgets.QLineEdit()
+            out_minvalue = QtWidgets.QLineEdit()
+            out_maxvalue = QtWidgets.QLineEdit()
+            out_acolor = QtWidgets.QLineEdit()
+            out_bcolor = QtWidgets.QLineEdit()
+            out_abri = QtWidgets.QLineEdit()
+            out_bbri = QtWidgets.QLineEdit()
+            out_segment_reverse = QtWidgets.QCheckBox("Reverse segment order")
+
+            lbl_controllers = QtWidgets.QLabel("Controllers")
+            lbl_rangelow = QtWidgets.QLabel("Range low")
+            lbl_rangehigh = QtWidgets.QLabel("Range high")
+            lbl_minvalue = QtWidgets.QLabel("Min value")
+            lbl_maxvalue = QtWidgets.QLabel("Max value")
+            lbl_acolor = QtWidgets.QLabel("A color")
+            lbl_abri = QtWidgets.QLabel("A brightness")
+            lbl_bcolor = QtWidgets.QLabel("B color")
+            lbl_bbri = QtWidgets.QLabel("B brightness")
+            lbl_reverse = QtWidgets.QLabel("")
+
+            output_form.addRow(lbl_controllers, out_controllers)
+            output_form.addRow(lbl_rangelow, out_rangelow)
+            output_form.addRow(lbl_rangehigh, out_rangehigh)
+            output_form.addRow(lbl_minvalue, out_minvalue)
+            output_form.addRow(lbl_maxvalue, out_maxvalue)
+            output_form.addRow(lbl_acolor, out_acolor)
+            output_form.addRow(lbl_abri, out_abri)
+            output_form.addRow(lbl_bcolor, out_bcolor)
+            output_form.addRow(lbl_bbri, out_bbri)
+            output_form.addRow(lbl_reverse, out_segment_reverse)
+            output_opts.setVisible(False)
+            form.addRow("", output_opts)
 
             buttons = QtWidgets.QDialogButtonBox(
                 QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
@@ -902,7 +968,64 @@ def _run_debug_window(
             process_popup.installEventFilter(popup_filter)
             dialog.installEventFilter(popup_filter)
 
+            def _toggle_input_opts():
+                mode = input_mode.currentText()
+                input_opts.setVisible(mode == "screen_region")
+
+            def _toggle_output_opts():
+                mode = output_mode.currentText()
+                output_opts.setVisible(mode in ("fullfade", "segmentsolid", "segmentpercent"))
+                show_range = mode == "fullfade"
+                show_minmax = mode in ("fullfade", "segmentpercent")
+                show_colors = mode in ("segmentsolid", "segmentpercent")
+                show_reverse = mode == "segmentpercent"
+
+                lbl_rangelow.setVisible(show_range)
+                out_rangelow.setVisible(show_range)
+                lbl_rangehigh.setVisible(show_range)
+                out_rangehigh.setVisible(show_range)
+
+                lbl_minvalue.setVisible(show_minmax)
+                out_minvalue.setVisible(show_minmax)
+                lbl_maxvalue.setVisible(show_minmax)
+                out_maxvalue.setVisible(show_minmax)
+
+                lbl_acolor.setVisible(show_colors)
+                out_acolor.setVisible(show_colors)
+                lbl_abri.setVisible(show_colors)
+                out_abri.setVisible(show_colors)
+                lbl_bcolor.setVisible(show_colors)
+                out_bcolor.setVisible(show_colors)
+                lbl_bbri.setVisible(show_colors)
+                out_bbri.setVisible(show_colors)
+
+                lbl_reverse.setVisible(show_reverse)
+                out_segment_reverse.setVisible(show_reverse)
+
+            input_mode.currentIndexChanged.connect(_toggle_input_opts)
+            output_mode.currentIndexChanged.connect(_toggle_output_opts)
+            _toggle_input_opts()
+            _toggle_output_opts()
+
             def on_accept():
+                def _to_int(text: str):
+                    text = text.strip()
+                    if text == "":
+                        return None
+                    try:
+                        return int(text)
+                    except Exception:
+                        return None
+
+                def _to_float(text: str):
+                    text = text.strip()
+                    if text == "":
+                        return None
+                    try:
+                        return float(text)
+                    except Exception:
+                        return None
+
                 app_id_val = app_id.text().strip()
                 proc_name = process.text().strip()
                 if not app_id_val:
@@ -916,7 +1039,49 @@ def _run_debug_window(
                     if app_id_val.lower() in existing:
                         QtWidgets.QMessageBox.warning(dialog, "Add Application", "That id already exists.")
                         return
-                if _append_application_to_config(CONFIG_PATH, app_id_val, [proc_name], friendly.text(), self.append_line):
+                mode_payload = None
+                input_sel = input_mode.currentText()
+                output_sel = output_mode.currentText()
+                mode_id_val = mode_id.text().strip()
+                if input_sel != "None" or output_sel != "None":
+                    if not mode_id_val:
+                        QtWidgets.QMessageBox.warning(dialog, "Add Application", "Mode id is required.")
+                        return
+                    mode_payload = {"id": mode_id_val}
+                    if input_sel != "None":
+                        mode_payload["input"] = input_sel
+                        if input_sel == "screen_region":
+                            mode_payload["x"] = _to_int(input_x.text())
+                            mode_payload["y"] = _to_int(input_y.text())
+                            mode_payload["width"] = _to_int(input_w.text())
+                            mode_payload["height"] = _to_int(input_h.text())
+                    if output_sel != "None":
+                        mode_payload["output"] = output_sel
+                        controllers = [c.strip() for c in out_controllers.text().split(",") if c.strip()]
+                        if controllers:
+                            mode_payload["controllers"] = controllers
+                        if output_sel == "fullfade":
+                            mode_payload["rangelow"] = _to_float(out_rangelow.text())
+                            mode_payload["rangehigh"] = _to_float(out_rangehigh.text())
+                            mode_payload["minvalue"] = _to_float(out_minvalue.text())
+                            mode_payload["maxvalue"] = _to_float(out_maxvalue.text())
+                        if output_sel in ("segmentsolid", "segmentpercent"):
+                            mode_payload["acolor"] = out_acolor.text().strip()
+                            mode_payload["abrightness"] = _to_int(out_abri.text())
+                            mode_payload["bcolor"] = out_bcolor.text().strip()
+                            mode_payload["bbrightness"] = _to_int(out_bbri.text())
+                        if output_sel == "segmentpercent":
+                            mode_payload["minvalue"] = _to_float(out_minvalue.text())
+                            mode_payload["maxvalue"] = _to_float(out_maxvalue.text())
+                            mode_payload["segmentorderreverse"] = out_segment_reverse.isChecked()
+                if _append_application_to_config(
+                    CONFIG_PATH,
+                    app_id_val,
+                    [proc_name],
+                    friendly.text(),
+                    mode_payload,
+                    self.append_line,
+                ):
                     self.append_line(f"Added application '{app_id_val}' to config.toml")
                     new_cfg = _reload_config(self.append_line)
                     if new_cfg is not None:
@@ -1141,6 +1306,7 @@ def _append_application_to_config(
     app_id: str,
     processes: list[str],
     friendlyname: str | None,
+    mode: dict | None,
     log_message,
 ) -> bool:
     if not config_path.exists():
@@ -1166,6 +1332,31 @@ def _append_application_to_config(
     if safe_name:
         lines.append(f"friendlyname = \"{safe_name}\"")
     lines.append(f"processes = [{proc_list}]")
+    if mode:
+        lines.append("")
+        lines.append("  [[application.modes]]")
+        mode_id = _toml_escape(str(mode.get("id", "default")))
+        lines.append(f"  id = \"{mode_id}\"")
+        input_mode = mode.get("input")
+        if input_mode:
+            lines.append(f"  input = \"{_toml_escape(str(input_mode))}\"")
+        output_mode = mode.get("output")
+        if output_mode:
+            lines.append(f"  output = \"{_toml_escape(str(output_mode))}\"")
+        for key, value in mode.items():
+            if key in ("id", "input", "output"):
+                continue
+            if value is None or value == "":
+                continue
+            if isinstance(value, bool):
+                lines.append(f"  {key} = {str(value).lower()}")
+            elif isinstance(value, (int, float)):
+                lines.append(f"  {key} = {value}")
+            elif isinstance(value, list):
+                quoted = ", ".join(f"\"{_toml_escape(str(v))}\"" for v in value if str(v).strip())
+                lines.append(f"  {key} = [{quoted}]")
+            else:
+                lines.append(f"  {key} = \"{_toml_escape(str(value))}\"")
     lines.append("")
     try:
         config_path.write_text(config_path.read_text(encoding="utf-8") + "\n".join(lines), encoding="utf-8")

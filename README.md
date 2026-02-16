@@ -50,7 +50,7 @@ Outputs
 - `getpreset <controller>`: show the current preset on a controller.
 - `ocroverlay <app>.<mode>`: toggle a green overlay on a screen_region mode.
 - `tasksearch <term>`: list running tasks that contain term.
-- `addapp`: opens a dialog to add a new `[[application]]` entry to `config.toml` (includes a modal process picker).
+- `addapp`: opens a dialog to add a new `[[application]]` entry to `config.toml` (includes a process picker and optional input/output mode settings).
 - `reloadconfig`: reload config.toml (threads keep old config).
 
 ## Tray IPC (Windows)
