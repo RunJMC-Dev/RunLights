@@ -2312,11 +2312,17 @@ def _apply_input_range(mode: dict, value: float | None, log_message=None) -> flo
         if min_f is None or max_f is None:
             return value
         if max_f <= min_f:
-            return value
+            if log_message:
+                log_message("Invalid input range: inputrangemax <= inputrangemin")
+            return None
+        if value < min_f or value > max_f:
+            if log_message:
+                log_message(f"Value {value} outside input range [{min_f}, {max_f}]")
+            return None
         pct = (value - min_f) / (max_f - min_f) * 100.0
-        return max(0.0, min(100.0, pct))
+        return pct
     except Exception:
-        return value
+        return None
 
 
 def _perform_ocr(
