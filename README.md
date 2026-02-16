@@ -29,7 +29,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 
 ## Mode Inputs/Outputs
 Inputs
-- `screen_region`: OCR a screen region and use the parsed value in a mode.
+- `screen_region`: OCR a screen region and use the parsed value in a mode (optional `inputrangemin`/`inputrangemax`).
 - `CLI`: input is provided by the named-pipe CLI (used for ES-DE console selection).
 
 Outputs

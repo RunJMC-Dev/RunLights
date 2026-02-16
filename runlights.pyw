@@ -539,8 +539,11 @@ def _run_debug_window(
                     val: str | float = text
                     if target_mode.get("output") != "segmentsolid":
                         num = _extract_number(text)
-                        if num is not None:
-                            val = num
+                        num = _apply_input_range(target_mode, num, self.append_line)
+                        if num is None:
+                            self.append_line(f"OCR {app_id}.{mode_id}: non-numeric '{text}' ignored")
+                            return
+                        val = num
                     _apply_output(target_mode, cfg_raw_global or {}, val, self.append_line)
 
                 if delay_s > 0:
@@ -884,12 +887,16 @@ def _run_debug_window(
                 input_y = QtWidgets.QLineEdit()
                 input_w = QtWidgets.QLineEdit()
                 input_h = QtWidgets.QLineEdit()
+                input_min = QtWidgets.QLineEdit()
+                input_max = QtWidgets.QLineEdit()
                 for w in (input_x, input_y, input_w, input_h):
                     w.setPlaceholderText("0")
                 input_form.addRow("X", input_x)
                 input_form.addRow("Y", input_y)
                 input_form.addRow("Width", input_w)
                 input_form.addRow("Height", input_h)
+                input_form.addRow("Input min", input_min)
+                input_form.addRow("Input max", input_max)
                 form.addRow("", input_group)
 
                 output_group = QtWidgets.QWidget(dlg)
@@ -950,6 +957,8 @@ def _run_debug_window(
                     input_y.setText(str(existing.get("y", "")).strip())
                     input_w.setText(str(existing.get("width", "")).strip())
                     input_h.setText(str(existing.get("height", "")).strip())
+                    input_min.setText(str(existing.get("inputrangemin", "")).strip())
+                    input_max.setText(str(existing.get("inputrangemax", "")).strip())
                     out_controllers.setText(", ".join(existing.get("controllers", []) or []))
                     out_minvalue.setText(str(existing.get("minvalue", "")).strip())
                     out_maxvalue.setText(str(existing.get("maxvalue", "")).strip())
@@ -997,6 +1006,8 @@ def _run_debug_window(
                             result["y"] = _to_int(input_y.text())
                             result["width"] = _to_int(input_w.text())
                             result["height"] = _to_int(input_h.text())
+                            result["inputrangemin"] = _to_float(input_min.text())
+                            result["inputrangemax"] = _to_float(input_max.text())
                     if output_sel != "None":
                         result["output"] = output_sel
                         controllers = [c.strip() for c in out_controllers.text().split(",") if c.strip()]
@@ -2097,6 +2108,27 @@ def _extract_number(text: str) -> float | None:
         return None
 
 
+def _apply_input_range(mode: dict, value: float | None, log_message=None) -> float | None:
+    if value is None:
+        return None
+    try:
+        min_v = mode.get("inputrangemin")
+        max_v = mode.get("inputrangemax")
+        min_f = float(min_v) if min_v is not None and str(min_v).strip() != "" else None
+        max_f = float(max_v) if max_v is not None and str(max_v).strip() != "" else None
+        if min_f is not None and value < min_f:
+            if log_message:
+                log_message(f"Value {value} below inputrangemin {min_f} ignored")
+            return None
+        if max_f is not None and value > max_f:
+            if log_message:
+                log_message(f"Value {value} above inputrangemax {max_f} ignored")
+            return None
+    except Exception:
+        pass
+    return value
+
+
 def _perform_ocr(
     region: tuple[int, int, int, int],
     include_image: bool = False,
@@ -2280,6 +2312,7 @@ def _ocr_poll_loop(
                 val = text
                 if entry["mode"].get("output") != "segmentsolid":
                     num = _extract_number(text)
+                    num = _apply_input_range(entry["mode"], num, log_message)
                     if num is not None:
                         val = num
                     else:
