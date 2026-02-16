@@ -15,7 +15,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 ## Quick start
 1. Clone: `git clone https://github.com/RunJMC-Dev/RunLights.git`
 2. Create/activate a virtual environment.
-3. Install deps: `pip install -r requirements.txt` (pywin32, psutil, requests, pystray, Pillow).
+3. Install deps: `pip install -r requirements.txt` (pywin32, psutil, requests, pystray, Pillow, PySide6, pytesseract). Requires Tesseract installed on Windows for OCR.
 4. Copy `config.example.toml` to `config.toml` in the app folder and edit.
 5. Launch tray (no console): double-click `runlights.pyw` (or `pythonw runlights.pyw`). It applies the idle state on start and watches configured processes.
 
@@ -27,14 +27,30 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - `idle` block defines color/brightness/transition when idle or when watched apps close.
 - ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` for `segmentsolid`.
 
+## Mode Inputs/Outputs
+Inputs
+- `screen_region`: OCR a screen region and use the parsed value in a mode.
+- `CLI`: input is provided by the named-pipe CLI (used for ES-DE console selection).
+
+Outputs
+- `fullfade`: map a numeric value to overall brightness/color on one or more controllers.
+- `segmentsolid`: apply A/B colors to segments, highlighting a bound target segment.
+- `segmentpercent`: fill a percentage of segments based on a numeric value.
+
 ## ESDE integration
 - Minimal standalone helper: `python standalone_cli.py <console>` (or place alongside ES-DE scripts; it reads `argv[3]` too). It sends the console name over the named pipe; if the tray isn’t running it no-ops without crashing ES-DE.
 - Only `/scripts/game-select` is needed; process detection handles startup/quit.
 
 ## Debug window commands
-- `show applications` / `show controllers`
+- `showapplications` / `showcontrollers`
 - `testoutput <app>.<mode> <value>`: drives outputs via config (`fullfade` uses range; `segmentsolid` uses bindings A/B).
 - `testoutput idle`: apply idle color/brightness to all segments.
+- `loadpreset <controller> <preset>`: apply a WLED preset by id or name.
+- `getpreset <controller>`: show the current preset on a controller.
+- `ocroverlay <app>.<mode>`: toggle a green overlay on a screen_region mode.
+- `tasksearch <term>`: list running tasks that contain term.
+- `addapp`: opens a dialog to add a new `[[application]]` entry to `config.toml` (includes a modal process picker).
+- `reloadconfig`: reload config.toml (threads keep old config).
 
 ## Tray IPC (Windows)
 - IPC uses a Windows named pipe: `\\.\pipe\runlights_ipc` (requires `pywin32`).
