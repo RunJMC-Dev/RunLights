@@ -799,6 +799,277 @@ def _run_debug_window(
                     existing_ids.add(str(app.get("id", "")).lower())
 
             selected_app_id = {"value": None}
+            current_modes: list[dict] = []
+
+            def _load_modes_from_app(app):
+                current_modes.clear()
+                modes = app.get("modes", []) if app else []
+                for m in modes:
+                    if isinstance(m, dict):
+                        current_modes.append(dict(m))
+
+            def _refresh_modes_view():
+                _clear_modes()
+                modes = list(current_modes)
+                if not modes:
+                    label = QtWidgets.QLabel("No modes configured.")
+                    label.setStyleSheet("color: #9aa0a6;")
+                    modes_layout.addWidget(label)
+                for mode in modes:
+                    mode_id = str(mode.get("id", "")).strip() or "(unnamed)"
+                    input_id = str(mode.get("input", "none")).strip() or "none"
+                    output_id = str(mode.get("output", "none")).strip() or "none"
+                    row = QtWidgets.QWidget(modes_wrap)
+                    row_layout = QtWidgets.QHBoxLayout(row)
+                    row_layout.setContentsMargins(0, 0, 0, 0)
+                    row_layout.setSpacing(8)
+                    label = QtWidgets.QLabel(f"{mode_id}: {input_id} -> {output_id}")
+                    label.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+                    row_layout.addWidget(label)
+
+                    edit_btn = QtWidgets.QToolButton(row)
+                    edit_btn.setToolTip("Edit mode")
+                    if not edit_icon.isNull():
+                        edit_btn.setIcon(edit_icon)
+                    else:
+                        edit_btn.setText("Edit")
+
+                    del_btn = QtWidgets.QToolButton(row)
+                    del_btn.setToolTip("Delete mode")
+                    if not delete_icon.isNull():
+                        del_btn.setIcon(delete_icon)
+                    else:
+                        del_btn.setText("Delete")
+
+                    row_layout.addWidget(edit_btn)
+                    row_layout.addWidget(del_btn)
+                    modes_layout.addWidget(row)
+                    edit_btn.clicked.connect(lambda _=None, mid=mode_id: _edit_mode(mid))
+                    del_btn.clicked.connect(lambda _=None, mid=mode_id: _delete_mode(mid))
+
+                add_row = QtWidgets.QWidget(modes_wrap)
+                add_layout = QtWidgets.QHBoxLayout(add_row)
+                add_layout.setContentsMargins(0, 0, 0, 0)
+                add_layout.setSpacing(8)
+                add_layout.addStretch(1)
+                add_btn = QtWidgets.QToolButton(add_row)
+                add_btn.setToolTip("Add mode")
+                add_btn.setText("Add")
+                add_layout.addWidget(add_btn)
+                modes_layout.addWidget(add_row)
+                add_btn.clicked.connect(lambda _=None: _edit_mode(None))
+
+            def _mode_dialog(existing: dict | None = None) -> dict | None:
+                dlg = QtWidgets.QDialog(dialog)
+                dlg.setWindowTitle("Mode")
+                dlg.setModal(True)
+                form = QtWidgets.QFormLayout(dlg)
+                form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+                mode_id = QtWidgets.QLineEdit()
+                mode_id.setPlaceholderText("e.g. health")
+                input_mode = QtWidgets.QComboBox()
+                input_mode.addItems(["None", "screen_region", "CLI"])
+                output_mode = QtWidgets.QComboBox()
+                output_mode.addItems(["None", "fullfade", "segmentsolid", "segmentpercent"])
+
+                form.addRow("Mode id", mode_id)
+                form.addRow("Input", input_mode)
+                form.addRow("Output", output_mode)
+
+                input_group = QtWidgets.QWidget(dlg)
+                input_form = QtWidgets.QFormLayout(input_group)
+                input_form.setContentsMargins(0, 0, 0, 0)
+                input_x = QtWidgets.QLineEdit()
+                input_y = QtWidgets.QLineEdit()
+                input_w = QtWidgets.QLineEdit()
+                input_h = QtWidgets.QLineEdit()
+                for w in (input_x, input_y, input_w, input_h):
+                    w.setPlaceholderText("0")
+                input_form.addRow("X", input_x)
+                input_form.addRow("Y", input_y)
+                input_form.addRow("Width", input_w)
+                input_form.addRow("Height", input_h)
+                form.addRow("", input_group)
+
+                output_group = QtWidgets.QWidget(dlg)
+                output_form = QtWidgets.QFormLayout(output_group)
+                output_form.setContentsMargins(0, 0, 0, 0)
+                out_controllers = QtWidgets.QLineEdit()
+                out_controllers.setPlaceholderText("e.g. PCROOMLHS, PCROOMRHS")
+                out_rangelow = QtWidgets.QLineEdit()
+                out_rangehigh = QtWidgets.QLineEdit()
+                out_minvalue = QtWidgets.QLineEdit()
+                out_maxvalue = QtWidgets.QLineEdit()
+                out_acolor = QtWidgets.QLineEdit()
+                out_bcolor = QtWidgets.QLineEdit()
+                out_abri = QtWidgets.QLineEdit()
+                out_bbri = QtWidgets.QLineEdit()
+                out_segment_reverse = QtWidgets.QCheckBox("Reverse segment order")
+                output_form.addRow("Controllers", out_controllers)
+                output_form.addRow("Range low", out_rangelow)
+                output_form.addRow("Range high", out_rangehigh)
+                output_form.addRow("Min value", out_minvalue)
+                output_form.addRow("Max value", out_maxvalue)
+                output_form.addRow("A color", out_acolor)
+                output_form.addRow("A brightness", out_abri)
+                output_form.addRow("B color", out_bcolor)
+                output_form.addRow("B brightness", out_bbri)
+                output_form.addRow("", out_segment_reverse)
+                form.addRow("", output_group)
+
+                status = QtWidgets.QLabel("")
+                status.setStyleSheet("color: #c62828;")
+                status.setVisible(False)
+                form.addRow("", status)
+
+                buttons = QtWidgets.QDialogButtonBox(
+                    QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
+                )
+                form.addRow(buttons)
+
+                def _set_combo(widget, value, default="None"):
+                    try:
+                        widget.blockSignals(True)
+                        if value:
+                            idx = widget.findText(str(value))
+                            widget.setCurrentIndex(idx if idx >= 0 else widget.findText(default))
+                        else:
+                            widget.setCurrentIndex(widget.findText(default))
+                    finally:
+                        widget.blockSignals(False)
+
+                def _toggle_groups():
+                    input_group.setVisible(input_mode.currentText() == "screen_region")
+                    output_group.setVisible(output_mode.currentText() != "None")
+
+                input_mode.currentIndexChanged.connect(_toggle_groups)
+                output_mode.currentIndexChanged.connect(_toggle_groups)
+
+                if existing:
+                    mode_id.setText(str(existing.get("id", "")).strip())
+                    _set_combo(input_mode, existing.get("input"))
+                    _set_combo(output_mode, existing.get("output"))
+                    input_x.setText(str(existing.get("x", "")).strip())
+                    input_y.setText(str(existing.get("y", "")).strip())
+                    input_w.setText(str(existing.get("width", "")).strip())
+                    input_h.setText(str(existing.get("height", "")).strip())
+                    out_controllers.setText(", ".join(existing.get("controllers", []) or []))
+                    out_rangelow.setText(str(existing.get("rangelow", "")).strip())
+                    out_rangehigh.setText(str(existing.get("rangehigh", "")).strip())
+                    out_minvalue.setText(str(existing.get("minvalue", "")).strip())
+                    out_maxvalue.setText(str(existing.get("maxvalue", "")).strip())
+                    out_acolor.setText(str(existing.get("acolor", "")).strip())
+                    out_abri.setText(str(existing.get("abrightness", "")).strip())
+                    out_bcolor.setText(str(existing.get("bcolor", "")).strip())
+                    out_bbri.setText(str(existing.get("bbrightness", "")).strip())
+                    out_segment_reverse.setChecked(bool(existing.get("segmentorderreverse", False)))
+
+                _toggle_groups()
+
+                def _to_int(text: str):
+                    text = text.strip()
+                    if text == "":
+                        return None
+                    try:
+                        return int(text)
+                    except Exception:
+                        return None
+
+                def _to_float(text: str):
+                    text = text.strip()
+                    if text == "":
+                        return None
+                    try:
+                        return float(text)
+                    except Exception:
+                        return None
+
+                result_holder = {"value": None}
+
+                def _on_accept():
+                    mid = mode_id.text().strip()
+                    if not mid:
+                        status.setText("Mode id is required.")
+                        status.setVisible(True)
+                        return
+                    result = {"id": mid}
+                    input_sel = input_mode.currentText()
+                    output_sel = output_mode.currentText()
+                    if input_sel != "None":
+                        result["input"] = input_sel
+                        if input_sel == "screen_region":
+                            result["x"] = _to_int(input_x.text())
+                            result["y"] = _to_int(input_y.text())
+                            result["width"] = _to_int(input_w.text())
+                            result["height"] = _to_int(input_h.text())
+                    if output_sel != "None":
+                        result["output"] = output_sel
+                        controllers = [c.strip() for c in out_controllers.text().split(",") if c.strip()]
+                        if controllers:
+                            result["controllers"] = controllers
+                        if output_sel == "fullfade":
+                            result["rangelow"] = _to_float(out_rangelow.text())
+                            result["rangehigh"] = _to_float(out_rangehigh.text())
+                            result["minvalue"] = _to_float(out_minvalue.text())
+                            result["maxvalue"] = _to_float(out_maxvalue.text())
+                        if output_sel in ("segmentsolid", "segmentpercent"):
+                            result["acolor"] = out_acolor.text().strip()
+                            result["abrightness"] = _to_int(out_abri.text())
+                            result["bcolor"] = out_bcolor.text().strip()
+                            result["bbrightness"] = _to_int(out_bbri.text())
+                        if output_sel == "segmentpercent":
+                            result["minvalue"] = _to_float(out_minvalue.text())
+                            result["maxvalue"] = _to_float(out_maxvalue.text())
+                            result["segmentorderreverse"] = out_segment_reverse.isChecked()
+                    result_holder["value"] = result
+                    dlg.accept()
+
+                buttons.accepted.connect(_on_accept)
+                buttons.rejected.connect(dlg.reject)
+                dlg.exec()
+                return result_holder["value"]
+
+            def _edit_mode(mode_id: str | None):
+                existing = None
+                if mode_id:
+                    for m in current_modes:
+                        if str(m.get("id", "")).strip() == mode_id:
+                            existing = dict(m)
+                            break
+                new_mode = _mode_dialog(existing)
+                if not new_mode:
+                    return
+                new_id = str(new_mode.get("id", "")).strip()
+                existing_ids = {str(m.get("id", "")).strip().lower() for m in current_modes}
+                if mode_id:
+                    existing_ids.discard(mode_id.lower())
+                if new_id.lower() in existing_ids:
+                    QtWidgets.QMessageBox.warning(dialog, "Mode", "Mode id already exists.")
+                    return
+                if mode_id:
+                    for idx, m in enumerate(current_modes):
+                        if str(m.get("id", "")).strip() == mode_id:
+                            current_modes[idx] = new_mode
+                            break
+                else:
+                    current_modes.append(new_mode)
+                _refresh_modes_view()
+
+            def _delete_mode(mode_id: str | None):
+                if not mode_id:
+                    return
+                res = QtWidgets.QMessageBox.question(
+                    dialog,
+                    "Delete Mode",
+                    f"Delete mode '{mode_id}'?",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                )
+                if res != QtWidgets.QMessageBox.Yes:
+                    return
+                current_modes[:] = [m for m in current_modes if str(m.get("id", "")).strip() != mode_id]
+                _refresh_modes_view()
+            current_modes: list[dict] = []
 
             def _mdi_icon(name: str) -> QtGui.QIcon:
                 svg_map = {
@@ -844,55 +1115,8 @@ def _run_debug_window(
                         w.deleteLater()
 
             def _render_modes(app):
-                _clear_modes()
-                modes = app.get("modes", []) if app else []
-                if not modes:
-                    label = QtWidgets.QLabel("No modes configured.")
-                    label.setStyleSheet("color: #9aa0a6;")
-                    modes_layout.addWidget(label)
-                for mode in modes:
-                    mode_id = str(mode.get("id", "")).strip() or "(unnamed)"
-                    input_id = str(mode.get("input", "none")).strip() or "none"
-                    output_id = str(mode.get("output", "none")).strip() or "none"
-                    row = QtWidgets.QWidget(modes_wrap)
-                    row_layout = QtWidgets.QHBoxLayout(row)
-                    row_layout.setContentsMargins(0, 0, 0, 0)
-                    row_layout.setSpacing(8)
-                    label = QtWidgets.QLabel(f"{mode_id}: {input_id} -> {output_id}")
-                    label.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-                    row_layout.addWidget(label)
-
-                    edit_btn = QtWidgets.QToolButton(row)
-                    edit_btn.setToolTip("Edit mode (coming soon)")
-                    if not edit_icon.isNull():
-                        edit_btn.setIcon(edit_icon)
-                    else:
-                        edit_btn.setText("Edit")
-                    edit_btn.setEnabled(False)
-
-                    del_btn = QtWidgets.QToolButton(row)
-                    del_btn.setToolTip("Delete mode (coming soon)")
-                    if not delete_icon.isNull():
-                        del_btn.setIcon(delete_icon)
-                    else:
-                        del_btn.setText("Delete")
-                    del_btn.setEnabled(False)
-
-                    row_layout.addWidget(edit_btn)
-                    row_layout.addWidget(del_btn)
-                    modes_layout.addWidget(row)
-
-                add_row = QtWidgets.QWidget(modes_wrap)
-                add_layout = QtWidgets.QHBoxLayout(add_row)
-                add_layout.setContentsMargins(0, 0, 0, 0)
-                add_layout.setSpacing(8)
-                add_layout.addStretch(1)
-                add_btn = QtWidgets.QToolButton(add_row)
-                add_btn.setToolTip("Add mode (coming soon)")
-                add_btn.setText("Add")
-                add_btn.setEnabled(False)
-                add_layout.addWidget(add_btn)
-                modes_layout.addWidget(add_row)
+                _load_modes_from_app(app)
+                _refresh_modes_view()
 
             def refresh_conflict():
                 msg = ""
@@ -1081,7 +1305,7 @@ def _run_debug_window(
                     app_id_val,
                     [proc_name],
                     friendly.text(),
-                    None,
+                    current_modes,
                     update_id,
                     self.append_line,
                 ):
@@ -1309,7 +1533,7 @@ def _render_application_block(
     app_id: str,
     processes: list[str],
     friendlyname: str | None,
-    mode: dict | None,
+    modes: list[dict] | None,
 ) -> list[str]:
     safe_id = _toml_escape(app_id)
     safe_name = _toml_escape(friendlyname.strip()) if friendlyname and friendlyname.strip() else ""
@@ -1318,31 +1542,32 @@ def _render_application_block(
     if safe_name:
         lines.append(f"friendlyname = \"{safe_name}\"")
     lines.append(f"processes = [{proc_list}]")
-    if mode:
-        lines.append("")
-        lines.append("  [[application.modes]]")
-        mode_id = _toml_escape(str(mode.get("id", "default")))
-        lines.append(f"  id = \"{mode_id}\"")
-        input_mode = mode.get("input")
-        if input_mode:
-            lines.append(f"  input = \"{_toml_escape(str(input_mode))}\"")
-        output_mode = mode.get("output")
-        if output_mode:
-            lines.append(f"  output = \"{_toml_escape(str(output_mode))}\"")
-        for key, value in mode.items():
-            if key in ("id", "input", "output"):
-                continue
-            if value is None or value == "":
-                continue
-            if isinstance(value, bool):
-                lines.append(f"  {key} = {str(value).lower()}")
-            elif isinstance(value, (int, float)):
-                lines.append(f"  {key} = {value}")
-            elif isinstance(value, list):
-                quoted = ", ".join(f"\"{_toml_escape(str(v))}\"" for v in value if str(v).strip())
-                lines.append(f"  {key} = [{quoted}]")
-            else:
-                lines.append(f"  {key} = \"{_toml_escape(str(value))}\"")
+    if modes:
+        for mode in modes:
+            lines.append("")
+            lines.append("  [[application.modes]]")
+            mode_id = _toml_escape(str(mode.get("id", "default")))
+            lines.append(f"  id = \"{mode_id}\"")
+            input_mode = mode.get("input")
+            if input_mode:
+                lines.append(f"  input = \"{_toml_escape(str(input_mode))}\"")
+            output_mode = mode.get("output")
+            if output_mode:
+                lines.append(f"  output = \"{_toml_escape(str(output_mode))}\"")
+            for key, value in mode.items():
+                if key in ("id", "input", "output"):
+                    continue
+                if value is None or value == "":
+                    continue
+                if isinstance(value, bool):
+                    lines.append(f"  {key} = {str(value).lower()}")
+                elif isinstance(value, (int, float)):
+                    lines.append(f"  {key} = {value}")
+                elif isinstance(value, list):
+                    quoted = ", ".join(f"\"{_toml_escape(str(v))}\"" for v in value if str(v).strip())
+                    lines.append(f"  {key} = [{quoted}]")
+                else:
+                    lines.append(f"  {key} = \"{_toml_escape(str(value))}\"")
     lines.append("")
     return lines
 
@@ -1371,7 +1596,7 @@ def _upsert_application_in_config(
     app_id: str,
     processes: list[str],
     friendlyname: str | None,
-    mode: dict | None,
+    modes: list[dict] | None,
     update_id: str | None,
     log_message,
 ) -> bool:
@@ -1391,7 +1616,7 @@ def _upsert_application_in_config(
         if app_id.lower() in existing:
             log_message(f"Application '{app_id}' already exists")
             return False
-    block_lines = _render_application_block(app_id, processes, friendlyname, mode)
+    block_lines = _render_application_block(app_id, processes, friendlyname, modes)
     try:
         raw = config_path.read_text(encoding="utf-8")
         lines = raw.splitlines()
