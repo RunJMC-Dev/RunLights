@@ -1930,20 +1930,11 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             log_message("fullfade missing controllers")
             return
         try:
-            minv = float(mode.get("minvalue", 0))
-            maxv = float(mode.get("maxvalue", 100))
-        except Exception:
-            minv, maxv = 0.0, 100.0
-        try:
             val_f = float(value)
         except Exception:
             log_message("Invalid numeric value for fullfade")
             return
-        if val_f < minv or val_f > maxv:
-            log_message(f"Value {val_f} outside [{minv}, {maxv}] ignored")
-            return
-        span = max(1e-9, maxv - minv)
-        pct = max(0.0, min(100.0, (val_f - minv) / span * 100.0))
+        pct = max(0.0, min(100.0, val_f))
         try:
             a_color = mode.get("acolor", "#ffffff")
             b_color = mode.get("bcolor", "#000000")
@@ -1960,6 +1951,14 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             bbri = int(mode.get("bbrightness", 255))
         except Exception:
             bbri = 255
+        try:
+            min_bri = int(mode.get("minvalue", 0))
+        except Exception:
+            min_bri = 0
+        try:
+            max_bri = int(mode.get("maxvalue", 255))
+        except Exception:
+            max_bri = 255
         t = pct / 100.0
         mix_rgb = (
             int(round(a_rgb[0] + (b_rgb[0] - a_rgb[0]) * t)),
@@ -1967,6 +1966,9 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             int(round(a_rgb[2] + (b_rgb[2] - a_rgb[2]) * t)),
         )
         mix_bri = int(round(abri + (bbri - abri) * t))
+        if max_bri < min_bri:
+            min_bri, max_bri = max_bri, min_bri
+        mix_bri = max(min_bri, min(max_bri, mix_bri))
         for controller_id in controllers_filter:
             ctrl = _lookup_controller(cfg_raw, controller_id) if controller_id else None
             if not ctrl:
