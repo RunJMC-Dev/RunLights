@@ -241,6 +241,20 @@ def _run_debug_window(
             sidebar_layout.setContentsMargins(0, 0, 0, 0)
             sidebar_layout.setSpacing(6)
             sidebar.setFixedWidth(120)
+
+            logo_label = QtWidgets.QLabel(sidebar)
+            logo_label.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter)
+            logo_path = _here / "images" / "logo.png"
+            if logo_path.exists():
+                try:
+                    pixmap = QtGui.QPixmap(str(logo_path))
+                    if not pixmap.isNull():
+                        scaled = pixmap.scaledToWidth(96, QtCore.Qt.SmoothTransformation)
+                        logo_label.setPixmap(scaled)
+                except Exception as exc:
+                    logging.warning("Failed to load logo %s: %s", logo_path, exc)
+            sidebar_layout.addWidget(logo_label)
+
             appconfig_btn = QtWidgets.QPushButton("App Config")
             appconfig_btn.clicked.connect(lambda _=None: self._show_app_config_dialog())
             sidebar_layout.addWidget(appconfig_btn)
@@ -320,22 +334,6 @@ def _run_debug_window(
                     painter.end()
 
             self.overlay_rect_cls = OverlayRect
-
-            self.logo_overlay = None
-            logo_path = _here / "images" / "logo.png"
-            if logo_path.exists():
-                try:
-                    pixmap = QtGui.QPixmap(str(logo_path))
-                    if not pixmap.isNull():
-                        scaled = pixmap.scaled(260, 160, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
-                        self.logo_overlay = QtWidgets.QLabel(self)
-                        self.logo_overlay.setPixmap(scaled)
-                        self.logo_overlay.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-                        self.logo_overlay.setStyleSheet("background: transparent;")
-                        self.logo_overlay.adjustSize()
-                        self.logo_overlay.raise_()
-                except Exception as exc:
-                    logging.warning("Failed to load logo %s: %s", logo_path, exc)
 
             input_row = QtWidgets.QHBoxLayout()
             class HistoryLineEdit(QtWidgets.QLineEdit):
@@ -1538,11 +1536,6 @@ def _run_debug_window(
 
         def _position_overlays(self):
             try:
-                if self.logo_overlay:
-                    w = self.logo_overlay.width()
-                    x = 12
-                    self.logo_overlay.move(x, 10)
-                    self.logo_overlay.raise_()
                 if self.preview_overlay and self.preview_overlay.isVisible():
                     w = self.preview_overlay.width()
                     x = max(8, self.width() - w - 12)
