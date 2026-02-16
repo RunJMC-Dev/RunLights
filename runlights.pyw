@@ -19,6 +19,8 @@ CONFIG_PATH = _here / "config.toml"
 os.chdir(_here)
 sys.path.insert(0, str(_here / "src"))
 
+PAUSE_EVENT = threading.Event()
+
 from runlights.tray import serve_in_thread  # noqa: E402
 from runlights.ipc import PIPE_NAME  # noqa: E402
 from runlights.config import load_config, ConfigError  # noqa: E402
@@ -747,6 +749,7 @@ def _run_debug_window(
             dialog.setModal(True)
             dialog.setMinimumWidth(700)
             dialog.resize(700, 520)
+            PAUSE_EVENT.set()
 
             form = QtWidgets.QFormLayout(dialog)
             form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
@@ -1065,6 +1068,70 @@ def _run_debug_window(
                     out_segment_reverse.setChecked(bool(existing.get("segmentorderreverse", False)))
 
                 _toggle_groups()
+
+                def _collect_mode_for_test():
+                    result = {"id": mode_id.text().strip() or "test"}
+                    input_sel = input_mode.currentText()
+                    output_sel = output_mode.currentText()
+                    if input_sel != "None":
+                        result["input"] = input_sel
+                        if input_sel == "screen_region":
+                            result["x"] = _to_int(input_x.text())
+                            result["y"] = _to_int(input_y.text())
+                            result["width"] = _to_int(input_w.text())
+                            result["height"] = _to_int(input_h.text())
+                            result["inputrangemin"] = _to_float(input_min.text())
+                            result["inputrangemax"] = _to_float(input_max.text())
+                    if output_sel != "None":
+                        result["output"] = output_sel
+                        controller_val = out_controllers.currentText().strip()
+                        if controller_val:
+                            result["controllers"] = [controller_val]
+                        result["minvalue"] = _to_float(out_minvalue.text())
+                        result["maxvalue"] = _to_float(out_maxvalue.text())
+                        result["acolor"] = out_acolor.text().strip()
+                        result["abrightness"] = out_abri.value()
+                        result["bcolor"] = out_bcolor.text().strip()
+                        result["bbrightness"] = out_bbri.value()
+                        result["segmentorderreverse"] = out_segment_reverse.isChecked()
+                    return result
+
+                test_timer = QtCore.QTimer(dlg)
+                test_timer.setInterval(1000)
+
+                def _apply_test_output():
+                    if not test_toggle.isChecked():
+                        return
+                    mode = _collect_mode_for_test()
+                    output_sel = mode.get("output")
+                    if not output_sel or output_sel == "None":
+                        return
+                    if output_sel == "segmentsolid":
+                        status.setText("Test not supported for segmentsolid.")
+                        status.setVisible(True)
+                        return
+                    try:
+                        slider_pct = test_slider.value()
+                        minv = mode.get("minvalue")
+                        maxv = mode.get("maxvalue")
+                        if minv is not None and maxv is not None:
+                            val = float(minv) + (float(maxv) - float(minv)) * (slider_pct / 100.0)
+                        else:
+                            val = float(slider_pct)
+                    except Exception:
+                        return
+                    _apply_output(mode, cfg_raw_global or {}, val, self.append_line)
+
+                def _toggle_test():
+                    if test_toggle.isChecked():
+                        test_timer.start()
+                        _apply_test_output()
+                    else:
+                        test_timer.stop()
+
+                test_toggle.stateChanged.connect(lambda _=None: _toggle_test())
+                test_slider.valueChanged.connect(lambda _=None: _apply_test_output())
+                test_timer.timeout.connect(_apply_test_output)
 
                 def _update_bri_labels():
                     a_bri_label.setText(str(out_abri.value()))
@@ -1447,7 +1514,10 @@ def _run_debug_window(
             buttons.rejected.connect(dialog.reject)
             app_id.setFocus()
             refresh_conflict()
-            dialog.exec()
+            try:
+                dialog.exec()
+            finally:
+                PAUSE_EVENT.clear()
 
         def append_line(self, line: str, preformatted: bool = False):
             if preformatted:
@@ -2177,6 +2247,9 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
     gaming_preset = cfg_raw.get("gaming_preset", "Gaming")
     try:
         while not stop_event.is_set():
+            if PAUSE_EVENT.is_set():
+                time.sleep(0.2)
+                continue
             current: set[str] = set()
             try:
                 for proc in psutil.process_iter(["name"]):
@@ -2402,6 +2475,9 @@ def _ocr_poll_loop(
     log_message(f"OCR active for {len(entries)} mode(s)")
     try:
         while not stop_event.is_set():
+            if PAUSE_EVENT.is_set():
+                time.sleep(0.2)
+                continue
             now = time.monotonic()
             for entry in entries:
                 if now < entry["next"]:
