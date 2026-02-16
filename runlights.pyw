@@ -932,6 +932,17 @@ def _run_debug_window(
                 form.addRow("", input_group)
 
                 form.addRow("Output", output_mode)
+                test_wrap = QtWidgets.QWidget(dlg)
+                test_layout = QtWidgets.QHBoxLayout(test_wrap)
+                test_layout.setContentsMargins(0, 0, 0, 0)
+                test_layout.setSpacing(8)
+                test_toggle = QtWidgets.QCheckBox()
+                test_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+                test_slider.setRange(0, 100)
+                test_slider.setValue(50)
+                test_layout.addWidget(test_toggle)
+                test_layout.addWidget(test_slider)
+                form.addRow("Test", test_wrap)
 
                 output_group = QtWidgets.QWidget(dlg)
                 output_form = QtWidgets.QFormLayout(output_group)
