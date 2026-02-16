@@ -29,4 +29,5 @@
 - No restricted tasks currently.
 - Always commit to GitHub after changes.
 - Immediately push all commits to GitHub.
+- After making changes, restart RunLights.
 - Update `README.md` when making changes.
