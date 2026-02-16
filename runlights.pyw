@@ -1886,9 +1886,8 @@ def _upsert_application_in_config(
             found = _find_application_block(lines, update_id)
             if found:
                 start, end = found
-                lines[start:end] = block_lines[1:]  # drop leading blank for replacement
-            else:
-                lines.extend(block_lines)
+                del lines[start:end]
+            lines.extend(block_lines)
         else:
             lines.extend(block_lines)
         out = "\n".join(lines)
