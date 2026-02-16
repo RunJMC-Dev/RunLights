@@ -911,7 +911,7 @@ def _run_debug_window(
                 input_mode = QtWidgets.QComboBox()
                 input_mode.addItems(["None", "screen_region", "CLI"])
                 output_mode = QtWidgets.QComboBox()
-                output_mode.addItems(["None", "crossfade", "segmentsolid", "segmentpercent"])
+                output_mode.addItems(["None", "crossfade", "fade", "segmentsolid", "segmentpercent"])
 
                 form.addRow("Mode id", mode_id)
                 form.addRow("Input", input_mode)
@@ -1050,6 +1050,7 @@ def _run_debug_window(
                     output_group.setVisible(out_mode != "None")
 
                     show_fullfade = out_mode == "crossfade"
+                    show_fade = out_mode == "fade"
                     show_segmentsolid = out_mode == "segmentsolid"
                     show_segmentpercent = out_mode == "segmentpercent"
 
@@ -1062,8 +1063,8 @@ def _run_debug_window(
                     # Controllers always relevant when output selected
                     _show(out_controllers, out_mode != "None")
 
-                    # Min/Max labels for crossfade are brightness
-                    if show_fullfade:
+                    # Min/Max labels for crossfade/fade are brightness
+                    if show_fullfade or show_fade:
                         lbl_minvalue.setText("Min brightness")
                         lbl_maxvalue.setText("Max brightness")
                     else:
@@ -1075,10 +1076,10 @@ def _run_debug_window(
                     _show(out_maxvalue, out_mode != "None")
 
                     # Colors/brightness:
-                    _show(a_color_wrap, show_fullfade or show_segmentsolid or show_segmentpercent)
+                    _show(a_color_wrap, show_fullfade or show_fade or show_segmentsolid or show_segmentpercent)
                     _show(b_color_wrap, show_fullfade or show_segmentsolid or show_segmentpercent)
-                    _show(a_bri_wrap, show_fullfade or show_segmentsolid or show_segmentpercent)
-                    _show(b_bri_wrap, show_fullfade or show_segmentsolid or show_segmentpercent)
+                    _show(a_bri_wrap, show_fullfade or show_fade or show_segmentsolid or show_segmentpercent)
+                    _show(b_bri_wrap, show_fullfade or show_fade or show_segmentsolid or show_segmentpercent)
 
                     # Reverse only for segmentpercent
                     _show(out_segment_reverse, show_segmentpercent)
@@ -1248,13 +1249,17 @@ def _run_debug_window(
                         controller_val = out_controllers.currentText().strip()
                         if controller_val:
                             result["controllers"] = [controller_val]
-                    if output_sel == "crossfade":
+                    if output_sel in ("crossfade", "fade"):
                         result["minvalue"] = _to_float(out_minvalue.text())
                         result["maxvalue"] = _to_float(out_maxvalue.text())
                     if output_sel in ("segmentsolid", "segmentpercent"):
                         result["acolor"] = out_acolor.text().strip()
                         result["abrightness"] = out_abri.value()
                         result["bcolor"] = out_bcolor.text().strip()
+                        result["bbrightness"] = out_bbri.value()
+                    if output_sel == "fade":
+                        result["acolor"] = out_acolor.text().strip()
+                        result["abrightness"] = out_abri.value()
                         result["bbrightness"] = out_bbri.value()
                     if output_sel == "segmentpercent":
                             result["minvalue"] = _to_float(out_minvalue.text())
@@ -2007,6 +2012,89 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
                         on=mix_bri > 0,
                         brightness=mix_bri,
                         color=f"#{mix_rgb[0]:02x}{mix_rgb[1]:02x}{mix_rgb[2]:02x}",
+                        segment=None,
+                        transition_ms=transition,
+                        timeout=_wled_timeout(cfg_raw),
+                    )
+                log_message(f"Applied {output_type} {value} -> {pct:.0f}% on {controller_id}")
+            except Exception as exc:
+                log_message(f"WLED error: {exc}")
+    elif output_type == "fade":
+        controllers_filter = list(mode.get("controllers", []) or [])
+        legacy_controller = mode.get("controller")
+        if legacy_controller and not controllers_filter:
+            controllers_filter = [legacy_controller]
+        if not controllers_filter:
+            log_message("fade missing controllers")
+            return
+        try:
+            val_f = float(value)
+        except Exception:
+            log_message("Invalid numeric value for fade")
+            return
+        pct = max(0.0, min(100.0, val_f))
+        try:
+            color_hex = str(mode.get("acolor", "#ffffff"))
+            color_rgb = wled._hex_to_rgb(color_hex)
+        except Exception:
+            color_rgb = (255, 255, 255)
+        try:
+            abri = int(mode.get("abrightness", 0))
+        except Exception:
+            abri = 0
+        try:
+            bbri = int(mode.get("bbrightness", 255))
+        except Exception:
+            bbri = 255
+        try:
+            min_bri = int(mode.get("minvalue", 0))
+        except Exception:
+            min_bri = 0
+        try:
+            max_bri = int(mode.get("maxvalue", 255))
+        except Exception:
+            max_bri = 255
+        t = pct / 100.0
+        mix_bri = int(round(abri + (bbri - abri) * t))
+        if max_bri < min_bri:
+            min_bri, max_bri = max_bri, min_bri
+        mix_bri = max(min_bri, min(max_bri, mix_bri))
+        for controller_id in controllers_filter:
+            ctrl = _lookup_controller(cfg_raw, controller_id) if controller_id else None
+            if not ctrl:
+                log_message(f"Controller {controller_id} not found")
+                continue
+            host = ctrl.get("host")
+            port = int(ctrl.get("port", 80))
+            try:
+                segments = ctrl.get("segments", []) or []
+                if segments:
+                    seg_updates = []
+                    for seg in segments:
+                        seg_id = seg.get("id")
+                        if seg_id is None:
+                            continue
+                        seg_updates.append(
+                            wled.WLEDPayload(
+                                on=mix_bri > 0,
+                                brightness=mix_bri,
+                                color=color_rgb,
+                                segment=seg_id,
+                            )
+                        )
+                    wled.send_batch(
+                        controller=wled.WLEDController(host=host, port=port),
+                        seg_updates=seg_updates,
+                        transition_ms=transition,
+                        timeout=_wled_timeout(cfg_raw),
+                    )
+                else:
+                    wled.send_simple(
+                        host=host,
+                        port=port,
+                        on=mix_bri > 0,
+                        brightness=mix_bri,
+                        color=f"#{color_rgb[0]:02x}{color_rgb[1]:02x}{color_rgb[2]:02x}",
                         segment=None,
                         transition_ms=transition,
                         timeout=_wled_timeout(cfg_raw),

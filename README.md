@@ -43,6 +43,15 @@ Outputs
     - abrightness: brightness at 0
     - bcolour: colour at 100
     - bbrightness: brightness at 100
+- `fade`:
+  - Technical description: apply the input value (0-100) as a brightness of all segments on the defined controllers.
+  - Dialog description: Single colour fade from brightness A to brightness B.
+  - Settings:
+    - min brightness: WLED min brightness (range 1-255)
+    - max brightness: WLED max brightness (range 1-255)
+    - acolour: colour
+    - abrightness: brightness at 0
+    - bbrightness: brightness at 100
 - `segmentsolid`: apply A/B colors to segments, highlighting a bound target segment.
 - `segmentpercent`: fill a percentage of segments based on a numeric value.
 
