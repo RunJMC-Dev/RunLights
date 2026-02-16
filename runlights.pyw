@@ -850,7 +850,6 @@ def _run_debug_window(
                     label = QtWidgets.QLabel("No modes configured.")
                     label.setStyleSheet("color: #9aa0a6;")
                     modes_layout.addWidget(label)
-                    return
                 for mode in modes:
                     mode_id = str(mode.get("id", "")).strip() or "(unnamed)"
                     input_id = str(mode.get("input", "none")).strip() or "none"
@@ -882,6 +881,18 @@ def _run_debug_window(
                     row_layout.addWidget(edit_btn)
                     row_layout.addWidget(del_btn)
                     modes_layout.addWidget(row)
+
+                add_row = QtWidgets.QWidget(modes_wrap)
+                add_layout = QtWidgets.QHBoxLayout(add_row)
+                add_layout.setContentsMargins(0, 0, 0, 0)
+                add_layout.setSpacing(8)
+                add_layout.addStretch(1)
+                add_btn = QtWidgets.QToolButton(add_row)
+                add_btn.setToolTip("Add mode (coming soon)")
+                add_btn.setText("Add")
+                add_btn.setEnabled(False)
+                add_layout.addWidget(add_btn)
+                modes_layout.addWidget(add_row)
 
             def refresh_conflict():
                 msg = ""
