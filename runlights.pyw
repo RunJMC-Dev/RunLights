@@ -878,7 +878,6 @@ def _run_debug_window(
 
                 form.addRow("Mode id", mode_id)
                 form.addRow("Input", input_mode)
-                form.addRow("Output", output_mode)
 
                 input_group = QtWidgets.QWidget(dlg)
                 input_form = QtWidgets.QFormLayout(input_group)
@@ -898,6 +897,8 @@ def _run_debug_window(
                 input_form.addRow("Input min", input_min)
                 input_form.addRow("Input max", input_max)
                 form.addRow("", input_group)
+
+                form.addRow("Output", output_mode)
 
                 output_group = QtWidgets.QWidget(dlg)
                 output_form = QtWidgets.QFormLayout(output_group)
