@@ -1876,8 +1876,9 @@ def _upsert_application_in_config(
     if cfg_raw_global:
         existing = {str(a.get("id", "")).lower() for a in cfg_raw_global.get("application", [])}
         if app_id.lower() in existing:
-            log_message(f"Application '{app_id}' already exists")
-            return False
+            if not update_id or app_id.lower() != str(update_id).lower():
+                log_message(f"Application '{app_id}' already exists")
+                return False
     block_lines = _render_application_block(app_id, processes, friendlyname, modes)
     try:
         raw = config_path.read_text(encoding="utf-8")
