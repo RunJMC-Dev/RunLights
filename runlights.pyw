@@ -1257,9 +1257,13 @@ def _run_debug_window(
                             result["inputrangemax"] = _to_float(input_max.text())
                     if output_sel != "None":
                         result["output"] = output_sel
-                        controller_val = out_controllers.currentText().strip()
-                        if controller_val:
-                            result["controllers"] = [controller_val]
+                        controllers = []
+                        for i in range(out_controllers.count()):
+                            item = out_controllers.item(i)
+                            if item and item.checkState() == QtCore.Qt.Checked:
+                                controllers.append(item.text())
+                        if controllers:
+                            result["controllers"] = controllers
                     if output_sel in ("crossfade", "fade"):
                         result["minvalue"] = _to_float(out_minvalue.text())
                         result["maxvalue"] = _to_float(out_maxvalue.text())
@@ -1273,9 +1277,9 @@ def _run_debug_window(
                         result["abrightness"] = out_abri.value()
                         result["bbrightness"] = out_bbri.value()
                     if output_sel == "segmentpercent":
-                            result["minvalue"] = _to_float(out_minvalue.text())
-                            result["maxvalue"] = _to_float(out_maxvalue.text())
-                            result["segmentorderreverse"] = out_segment_reverse.isChecked()
+                        result["minvalue"] = _to_float(out_minvalue.text())
+                        result["maxvalue"] = _to_float(out_maxvalue.text())
+                        result["segmentorderreverse"] = out_segment_reverse.isChecked()
                     result_holder["value"] = result
                     dlg.accept()
 
