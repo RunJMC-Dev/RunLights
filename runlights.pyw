@@ -1111,13 +1111,7 @@ def _run_debug_window(
                         status.setVisible(True)
                         return
                     try:
-                        slider_pct = test_slider.value()
-                        minv = mode.get("minvalue")
-                        maxv = mode.get("maxvalue")
-                        if minv is not None and maxv is not None:
-                            val = float(minv) + (float(maxv) - float(minv)) * (slider_pct / 100.0)
-                        else:
-                            val = float(slider_pct)
+                        val = float(test_slider.value())
                     except Exception:
                         return
                     _apply_output(mode, cfg_raw_global or {}, val, self.append_line)
