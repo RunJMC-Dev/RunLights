@@ -6,12 +6,16 @@ config_version = 1
 
 update_interval_ms = 500      # How often to send REST updates (tweak for performance).
 default_transition_ms = 150   # Crossfade time for REST updates to smooth changes.
+debug = true
+gaming_preset = "Gaming"      # Default preset to use when a game starts (per-controller override below).
+
 
 # Define your WLED controllers here.
 [[controllers]]
 id = "PCROOMLHS"
 friendlyname = "PC Room Left Shelf"
 host = "192.168.20.118"
+gaming_preset = "Gaming"
 
   [[controllers.segments]]
   id = 0
@@ -47,6 +51,7 @@ host = "192.168.20.118"
 id = "PCROOMRHS"
 friendlyname = "PC Room Right Shelf"
 host = "192.168.20.245"
+gaming_preset = "Gaming"
 
   [[controllers.segments]]
   id = 0
@@ -78,54 +83,162 @@ host = "192.168.20.245"
   label = "mastersystem"
   friendlyname = "Master System"
 
-[defaults]
-mode = "idle"
-output = "#FFFFFF"
-controller = "all"
+[[controllers]]
+id = "PCROOMMIDDLE"
+friendlyname = "PC Room Middle"
+host = "192.168.20.182"
+gaming_preset = "Gaming"
+
+  [[controllers.segments]]
+  id = 0
+  label = "steam"
+  friendlyname = "Steam"
 
 # Applications and their modes
 [[application]]
 id = "quake1"
 friendlyname = "Quake"
-processes = ["quake.exe"]
+processes = ["glqwcl.exe"]
 
   [[application.modes]]
   id = "health"
   input = "screen_region"
-  output = "fullfade"
-  color = "#ff0000"
-  x = 1200
-  y = 500
+  output = "crossfade"
+  acolor = "#ffe5d0"
+  abrightness = "128"
+  bcolor = "#ffffff"
+  bbrightness = "255"
+  rangelow = 0
+  rangehigh = 250
+  x = 140
+  y = 458
   width = 100
   height = 200
-  controller = "PCROOMLHS"
+  controllers = ["PCROOMLHS"]
 
   [[application.modes]]
   id = "ammo"
   input = "screen_region"
-  output = "fullfade"
-  color = "#ffff00"
-  x = 1200
-  y = 500
-  width = 100
-  height = 200
-  controller = "PCROOMRHS"
+  output = "crossfade"
+  acolor = "#ffe5d0"
+  abrightness = "255"
+  bcolor = "#ffff00"
+  bbrightness = "255"
+  x = 1791
+  y = 2018
+  width = 59
+  height = 32
+  controllers = ["PCROOMRHS"]
+
+[[application]]
+id = "caretaker"
+friendlyname = "The Last Caretaker"
+processes = ["voyage.exe"]
+
+  [[application.modes]]
+  id = "health"
+  input = "screen_region"
+  output = "segmentpercent"
+  acolor = "#ffffff"
+  abrightness = "128"
+  bcolor = "#ff0000"
+  bbrightness = "128"
+  delimiter = "/"
+  minvalue = "1"
+  maxvalue = "99"
+  segmentorderreverse = true
+  dangertype = "flash"
+  dangerthreshold = "20"
+  x = 1791
+  y = 2084
+  width = 59
+  height = 32
+  controllers = ["PCROOMLHS"]
+
+  [[application.modes]]
+  id = "power"
+  input = "screen_region"
+  output = "segmentpercent"
+  acolor = "#FFFF00"
+  abrightness = "128"
+  bcolor = "#000000"
+  bbrightness = "0"
+  delimiter = "/"
+  minvalue = "0"
+  maxvalue = "500"
+  segmentorderreverse = true
+  dangertype = "flash"
+  dangerthreshold = "20"
+  x = 1791
+  y = 2018
+  width = 50
+  height = 32
+  controllers = ["PCROOMRHS"]
+
+[[application]]
+id = "starrapture"
+friendlyname = "StarRupture"
+processes = ["StarRuptureGameSteam.exe"]
+
+  [[application.modes]]
+  id = "health"
+  input = "screen_region"
+  output = "segmentpercent"
+  acolor = "#ffffff"
+  abrightness = "128"
+  bcolor = "#ff0000"
+  bbrightness = "128"
+  minvalue = "1"
+  maxvalue = "99"
+  segmentorderreverse = true
+  dangertype = "flash"
+  dangerthreshold = "20"
+  x = 645
+  y = 1911
+  width = 70
+  height = 42
+  controllers = ["PCROOMLHS"]
+
+  [[application.modes]]
+  id = "power"
+  input = "screen_region"
+  ocr_color = "red"
+  ocr_contrast = 1.0
+  output = "segmentpercent"
+  acolor = "#FFFFFF"
+  abrightness = "128"
+  bcolor = "#FFFFFF"
+  bbrightness = "0"
+  delimiter = "/"
+  minvalue = "0"
+  maxvalue = "50"
+  segmentorderreverse = true
+  dangertype = "flash"
+  dangerthreshold = "20"
+  x = 645
+  y = 1841
+  width = 60
+  height = 40
+  controllers = ["PCROOMRHS"]
 
 [[application]]
 id = "esde"
 friendlyname = "Emulation Station Desktop Edition"
-processes = ["emulationstation.exe"]
+processes = ["ES-DE.exe"]
 
   [[application.modes]]
   id = "game-select"
   input = "CLI"
   output = "segmentsolid"
-  color = "#ff0000"
-  controllers = ["PCROOMLHS", "PCROOMRHS"]
+  acolor = "#ffe5d0"
+  abrightness = "255"
+  bcolor = "#000000"
+  bbrightness = "0"
+  controllers = ["PCROOMLHS", "PCROOMRHS","PCROOMMIDDLE"]
 
   [application.modes.bindings]
   amiga = { controller = "PCROOMLHS", segment = 1 }
-  atari = { controller = "PCROOMLHS", segment = 2 }
+  atari2600 = { controller = "PCROOMLHS", segment = 2 }
   n64 = { controller = "PCROOMLHS", segment = 3 }
   snes = { controller = "PCROOMLHS", segment = 4 }
   nes = { controller = "PCROOMLHS", segment = 5 }
@@ -135,3 +248,10 @@ processes = ["emulationstation.exe"]
   megadrive = { controller = "PCROOMRHS", segment = 3 }
   gamegear = { controller = "PCROOMRHS", segment = 4 }
   mastersystem = { controller = "PCROOMRHS", segment = 5 }
+  steam = { controller = "PCROOMMIDDLE", segment = 0 }
+  
+
+[[application]]
+id = "doomdarkages"
+friendlyname = "Doom The Dark Ages"
+processes = ["DOOMTheDarkAges.exe"]
