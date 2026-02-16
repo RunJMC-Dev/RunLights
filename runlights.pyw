@@ -232,8 +232,23 @@ def _run_debug_window(
                     pass
 
             central = QtWidgets.QWidget(self)
-            layout = QtWidgets.QVBoxLayout(central)
-            layout.setContentsMargins(10, 6, 10, 10)
+            root_layout = QtWidgets.QHBoxLayout(central)
+            root_layout.setContentsMargins(10, 6, 10, 10)
+            root_layout.setSpacing(8)
+
+            sidebar = QtWidgets.QWidget(central)
+            sidebar_layout = QtWidgets.QVBoxLayout(sidebar)
+            sidebar_layout.setContentsMargins(0, 0, 0, 0)
+            sidebar_layout.setSpacing(6)
+            sidebar.setFixedWidth(120)
+            appconfig_btn = QtWidgets.QPushButton("App Config")
+            appconfig_btn.clicked.connect(lambda _=None: self._show_app_config_dialog())
+            sidebar_layout.addWidget(appconfig_btn)
+            sidebar_layout.addStretch(1)
+
+            main = QtWidgets.QWidget(central)
+            layout = QtWidgets.QVBoxLayout(main)
+            layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(6)
 
             class _LogBox(QtWidgets.QPlainTextEdit):
@@ -364,6 +379,8 @@ def _run_debug_window(
             input_row.addWidget(self.send_btn)
             layout.addLayout(input_row)
 
+            root_layout.addWidget(sidebar)
+            root_layout.addWidget(main, stretch=1)
             self.setCentralWidget(central)
 
             # Start with some spacing at the top for readability.
@@ -796,6 +813,10 @@ def _run_debug_window(
             form.addRow("", conflict_label)
             conflict_label.setVisible(False)
 
+            save_btn = buttons.button(QtWidgets.QDialogButtonBox.Ok)
+            if save_btn:
+                save_btn.setText("Save")
+
             existing_ids = set()
             if cfg_raw_global:
                 for app in cfg_raw_global.get("application", []):
@@ -803,6 +824,20 @@ def _run_debug_window(
 
             selected_app_id = {"value": None}
             current_modes: list[dict] = []
+            initial_snapshot = {"value": None}
+
+            def _snapshot_state():
+                return {
+                    "app_id": app_id.text().strip(),
+                    "friendly": friendly.text().strip(),
+                    "process": process.text().strip(),
+                    "modes": [dict(m) for m in current_modes],
+                }
+
+            def _update_dirty():
+                if save_btn is None:
+                    return
+                save_btn.setEnabled(_snapshot_state() != initial_snapshot["value"])
 
             def _load_modes_from_app(app):
                 current_modes.clear()
@@ -1128,6 +1163,7 @@ def _run_debug_window(
                 else:
                     current_modes.append(new_mode)
                 _refresh_modes_view()
+                _update_dirty()
 
             def _delete_mode(mode_id: str | None):
                 if not mode_id:
@@ -1142,6 +1178,7 @@ def _run_debug_window(
                     return
                 current_modes[:] = [m for m in current_modes if str(m.get("id", "")).strip() != mode_id]
                 _refresh_modes_view()
+                _update_dirty()
             current_modes: list[dict] = []
 
             def _mdi_icon(name: str) -> QtGui.QIcon:
@@ -1209,6 +1246,7 @@ def _run_debug_window(
                 ok_btn = buttons.button(QtWidgets.QDialogButtonBox.Ok)
                 if ok_btn:
                     ok_btn.setEnabled(bool(app_id.text().strip()) and bool(process.text().strip()) and not msg)
+                _update_dirty()
 
             app_id.textChanged.connect(refresh_conflict)
             friendly.textChanged.connect(refresh_conflict)
@@ -1336,6 +1374,8 @@ def _run_debug_window(
                 _dismiss_popup()
                 _render_modes(app)
                 refresh_conflict()
+                initial_snapshot["value"] = _snapshot_state()
+                _update_dirty()
 
             def _clear_fields():
                 _set_text(app_id, "")
@@ -1345,6 +1385,8 @@ def _run_debug_window(
                 _dismiss_popup()
                 _render_modes(None)
                 refresh_conflict()
+                initial_snapshot["value"] = _snapshot_state()
+                _update_dirty()
 
             def _on_app_picker_change():
                 app_key = app_picker.currentData()
@@ -1357,6 +1399,9 @@ def _run_debug_window(
 
             app_picker.currentIndexChanged.connect(_on_app_picker_change)
             _on_app_picker_change()
+
+            initial_snapshot["value"] = _snapshot_state()
+            _update_dirty()
 
             def on_accept():
                 app_id_val = app_id.text().strip()
