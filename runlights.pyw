@@ -903,22 +903,63 @@ def _run_debug_window(
                 output_group = QtWidgets.QWidget(dlg)
                 output_form = QtWidgets.QFormLayout(output_group)
                 output_form.setContentsMargins(0, 0, 0, 0)
-                out_controllers = QtWidgets.QLineEdit()
-                out_controllers.setPlaceholderText("e.g. PCROOMLHS, PCROOMRHS")
+                controller_ids = []
+                if cfg_raw_global:
+                    for ctrl in cfg_raw_global.get("controllers", []):
+                        cid = str(ctrl.get("id", "")).strip()
+                        if cid:
+                            controller_ids.append(cid)
+                out_controllers = QtWidgets.QComboBox()
+                out_controllers.addItem("")
+                for cid in controller_ids:
+                    out_controllers.addItem(cid)
                 out_minvalue = QtWidgets.QLineEdit()
                 out_maxvalue = QtWidgets.QLineEdit()
                 out_acolor = QtWidgets.QLineEdit()
                 out_bcolor = QtWidgets.QLineEdit()
-                out_abri = QtWidgets.QLineEdit()
-                out_bbri = QtWidgets.QLineEdit()
+                a_color_btn = QtWidgets.QToolButton()
+                a_color_btn.setText("Pick")
+                b_color_btn = QtWidgets.QToolButton()
+                b_color_btn.setText("Pick")
+                a_color_wrap = QtWidgets.QWidget(dlg)
+                a_color_layout = QtWidgets.QHBoxLayout(a_color_wrap)
+                a_color_layout.setContentsMargins(0, 0, 0, 0)
+                a_color_layout.setSpacing(6)
+                a_color_layout.addWidget(out_acolor)
+                a_color_layout.addWidget(a_color_btn)
+                b_color_wrap = QtWidgets.QWidget(dlg)
+                b_color_layout = QtWidgets.QHBoxLayout(b_color_wrap)
+                b_color_layout.setContentsMargins(0, 0, 0, 0)
+                b_color_layout.setSpacing(6)
+                b_color_layout.addWidget(out_bcolor)
+                b_color_layout.addWidget(b_color_btn)
+
+                out_abri = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+                out_abri.setRange(0, 255)
+                out_bbri = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+                out_bbri.setRange(0, 255)
+                a_bri_label = QtWidgets.QLabel("0")
+                b_bri_label = QtWidgets.QLabel("0")
+                a_bri_wrap = QtWidgets.QWidget(dlg)
+                a_bri_layout = QtWidgets.QHBoxLayout(a_bri_wrap)
+                a_bri_layout.setContentsMargins(0, 0, 0, 0)
+                a_bri_layout.setSpacing(6)
+                a_bri_layout.addWidget(out_abri, stretch=1)
+                a_bri_layout.addWidget(a_bri_label)
+                b_bri_wrap = QtWidgets.QWidget(dlg)
+                b_bri_layout = QtWidgets.QHBoxLayout(b_bri_wrap)
+                b_bri_layout.setContentsMargins(0, 0, 0, 0)
+                b_bri_layout.setSpacing(6)
+                b_bri_layout.addWidget(out_bbri, stretch=1)
+                b_bri_layout.addWidget(b_bri_label)
                 out_segment_reverse = QtWidgets.QCheckBox("Reverse segment order")
                 output_form.addRow("Controllers", out_controllers)
                 output_form.addRow("Min value", out_minvalue)
                 output_form.addRow("Max value", out_maxvalue)
-                output_form.addRow("A color", out_acolor)
-                output_form.addRow("A brightness", out_abri)
-                output_form.addRow("B color", out_bcolor)
-                output_form.addRow("B brightness", out_bbri)
+                output_form.addRow("A color", a_color_wrap)
+                output_form.addRow("A brightness", a_bri_wrap)
+                output_form.addRow("B color", b_color_wrap)
+                output_form.addRow("B brightness", b_bri_wrap)
                 output_form.addRow("", out_segment_reverse)
                 form.addRow("", output_group)
 
@@ -960,16 +1001,44 @@ def _run_debug_window(
                     input_h.setText(str(existing.get("height", "")).strip())
                     input_min.setText(str(existing.get("inputrangemin", "")).strip())
                     input_max.setText(str(existing.get("inputrangemax", "")).strip())
-                    out_controllers.setText(", ".join(existing.get("controllers", []) or []))
+                    existing_controllers = existing.get("controllers", []) or []
+                    if existing_controllers:
+                        idx = out_controllers.findText(str(existing_controllers[0]))
+                        if idx >= 0:
+                            out_controllers.setCurrentIndex(idx)
                     out_minvalue.setText(str(existing.get("minvalue", "")).strip())
                     out_maxvalue.setText(str(existing.get("maxvalue", "")).strip())
                     out_acolor.setText(str(existing.get("acolor", "")).strip())
-                    out_abri.setText(str(existing.get("abrightness", "")).strip())
+                    try:
+                        out_abri.setValue(int(existing.get("abrightness", 0)))
+                    except Exception:
+                        out_abri.setValue(0)
                     out_bcolor.setText(str(existing.get("bcolor", "")).strip())
-                    out_bbri.setText(str(existing.get("bbrightness", "")).strip())
+                    try:
+                        out_bbri.setValue(int(existing.get("bbrightness", 0)))
+                    except Exception:
+                        out_bbri.setValue(0)
                     out_segment_reverse.setChecked(bool(existing.get("segmentorderreverse", False)))
 
                 _toggle_groups()
+
+                def _update_bri_labels():
+                    a_bri_label.setText(str(out_abri.value()))
+                    b_bri_label.setText(str(out_bbri.value()))
+
+                out_abri.valueChanged.connect(lambda _=None: _update_bri_labels())
+                out_bbri.valueChanged.connect(lambda _=None: _update_bri_labels())
+                _update_bri_labels()
+
+                def _pick_color(target: QtWidgets.QLineEdit):
+                    color = QtWidgets.QColorDialog.getColor(
+                        QtGui.QColor(target.text() or "#ffffff"), dlg, "Select Color"
+                    )
+                    if color.isValid():
+                        target.setText(color.name())
+
+                a_color_btn.clicked.connect(lambda _=None: _pick_color(out_acolor))
+                b_color_btn.clicked.connect(lambda _=None: _pick_color(out_bcolor))
 
                 def _to_int(text: str):
                     text = text.strip()
@@ -1011,17 +1080,17 @@ def _run_debug_window(
                             result["inputrangemax"] = _to_float(input_max.text())
                     if output_sel != "None":
                         result["output"] = output_sel
-                        controllers = [c.strip() for c in out_controllers.text().split(",") if c.strip()]
-                        if controllers:
-                            result["controllers"] = controllers
+                        controller_val = out_controllers.currentText().strip()
+                        if controller_val:
+                            result["controllers"] = [controller_val]
                         if output_sel == "fullfade":
                             result["minvalue"] = _to_float(out_minvalue.text())
                             result["maxvalue"] = _to_float(out_maxvalue.text())
                         if output_sel in ("segmentsolid", "segmentpercent"):
                             result["acolor"] = out_acolor.text().strip()
-                            result["abrightness"] = _to_int(out_abri.text())
+                            result["abrightness"] = out_abri.value()
                             result["bcolor"] = out_bcolor.text().strip()
-                            result["bbrightness"] = _to_int(out_bbri.text())
+                            result["bbrightness"] = out_bbri.value()
                         if output_sel == "segmentpercent":
                             result["minvalue"] = _to_float(out_minvalue.text())
                             result["maxvalue"] = _to_float(out_maxvalue.text())
