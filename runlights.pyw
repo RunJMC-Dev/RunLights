@@ -486,7 +486,7 @@ def _run_debug_window(
                     "  showcontrollers            - list controllers/segments",
                     "  ocrtest [app.mode] [delay] - run OCR once for a screen_region mode (optional delay sec)",
                     "  testoutput <app>.<mode> <value>",
-                    "    fullfade:   testoutput myapp.health 42",
+                    "    crossfade:   testoutput myapp.health 42",
                     "    segmentsolid: testoutput esde.game-select arcade",
                     "  testoutput idle            - apply idle color/brightness",
                     "  loadpreset <controller> <preset> - apply a WLED preset by id or name",
@@ -911,7 +911,7 @@ def _run_debug_window(
                 input_mode = QtWidgets.QComboBox()
                 input_mode.addItems(["None", "screen_region", "CLI"])
                 output_mode = QtWidgets.QComboBox()
-                output_mode.addItems(["None", "fullfade", "segmentsolid", "segmentpercent"])
+                output_mode.addItems(["None", "crossfade", "segmentsolid", "segmentpercent"])
 
                 form.addRow("Mode id", mode_id)
                 form.addRow("Input", input_mode)
@@ -1049,7 +1049,7 @@ def _run_debug_window(
                     out_mode = output_mode.currentText()
                     output_group.setVisible(out_mode != "None")
 
-                    show_fullfade = out_mode == "fullfade"
+                    show_fullfade = out_mode == "crossfade"
                     show_segmentsolid = out_mode == "segmentsolid"
                     show_segmentpercent = out_mode == "segmentpercent"
 
@@ -1062,7 +1062,7 @@ def _run_debug_window(
                     # Controllers always relevant when output selected
                     _show(out_controllers, out_mode != "None")
 
-                    # Min/Max labels for fullfade are brightness
+                    # Min/Max labels for crossfade are brightness
                     if show_fullfade:
                         lbl_minvalue.setText("Min brightness")
                         lbl_maxvalue.setText("Max brightness")
@@ -1115,7 +1115,7 @@ def _run_debug_window(
                         out_bbri.setValue(0)
                     out_segment_reverse.setChecked(bool(existing.get("segmentorderreverse", False)))
                 else:
-                    # Defaults for new fullfade setups
+                    # Defaults for new crossfade setups
                     out_minvalue.setText("0")
                     out_maxvalue.setText("255")
                     out_acolor.setText("#ffffff")
@@ -1248,15 +1248,15 @@ def _run_debug_window(
                         controller_val = out_controllers.currentText().strip()
                         if controller_val:
                             result["controllers"] = [controller_val]
-                        if output_sel == "fullfade":
-                            result["minvalue"] = _to_float(out_minvalue.text())
-                            result["maxvalue"] = _to_float(out_maxvalue.text())
-                        if output_sel in ("segmentsolid", "segmentpercent"):
-                            result["acolor"] = out_acolor.text().strip()
-                            result["abrightness"] = out_abri.value()
-                            result["bcolor"] = out_bcolor.text().strip()
-                            result["bbrightness"] = out_bbri.value()
-                        if output_sel == "segmentpercent":
+                    if output_sel == "crossfade":
+                        result["minvalue"] = _to_float(out_minvalue.text())
+                        result["maxvalue"] = _to_float(out_maxvalue.text())
+                    if output_sel in ("segmentsolid", "segmentpercent"):
+                        result["acolor"] = out_acolor.text().strip()
+                        result["abrightness"] = out_abri.value()
+                        result["bcolor"] = out_bcolor.text().strip()
+                        result["bbrightness"] = out_bbri.value()
+                    if output_sel == "segmentpercent":
                             result["minvalue"] = _to_float(out_minvalue.text())
                             result["maxvalue"] = _to_float(out_maxvalue.text())
                             result["segmentorderreverse"] = out_segment_reverse.isChecked()
@@ -1918,21 +1918,23 @@ def _apply_ocr_delimiter(mode: dict, text: str, log_message=None) -> str:
 
 def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
     output_type = mode.get("output")
+    if output_type == "fullfade":
+        output_type = "crossfade"
     color = mode.get("color") or mode.get("acolor") or mode.get("bcolor") or "#ffffff"
     transition = cfg_raw.get("default_transition_ms")
 
-    if output_type == "fullfade":
+    if output_type == "crossfade":
         controllers_filter = list(mode.get("controllers", []) or [])
         legacy_controller = mode.get("controller")
         if legacy_controller and not controllers_filter:
             controllers_filter = [legacy_controller]
         if not controllers_filter:
-            log_message("fullfade missing controllers")
+            log_message("crossfade missing controllers")
             return
         try:
             val_f = float(value)
         except Exception:
-            log_message("Invalid numeric value for fullfade")
+            log_message("Invalid numeric value for crossfade")
             return
         pct = max(0.0, min(100.0, val_f))
         try:

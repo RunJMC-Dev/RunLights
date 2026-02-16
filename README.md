@@ -23,7 +23,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - Copy `config.example.toml` to `config.toml` in the app folder (keep it beside the app so it moves with it) and edit.
 - Uses WLED REST with transitions; default update interval is `500ms` and can be tweaked per config.
 - Controllers use an `id` for references (no spaces) plus an optional human-friendly `name`; define static IPs and segments.
-- Modes are keyed off process names; can include screen-region inputs, range mapping, and outputs such as `fullfade` (whole strip brightness from range) and `segmentsolid` (target segment vs others with A/B colors/brightness).
+- Modes are keyed off process names; can include screen-region inputs, range mapping, and outputs such as `crossfade` (whole strip brightness from range) and `segmentsolid` (target segment vs others with A/B colors/brightness).
 - `idle` block defines color/brightness/transition when idle or when watched apps close.
 - ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` for `segmentsolid`.
 
@@ -33,7 +33,7 @@ Inputs
 - `CLI`: input is provided by the named-pipe CLI (used for ES-DE console selection).
 
 Outputs
-- `fullfade`:
+- `crossfade`:
   - Technical description: apply the input value (0-100) as a brightness of all segments on the defined controllers.
   - Dialog description: Fade from A to B. (tip set A/B brightness to 0 to fade to/from black)
   - Settings:
@@ -53,7 +53,7 @@ Outputs
 
 ## Debug window commands
 - `showapplications` / `showcontrollers`
-- `testoutput <app>.<mode> <value>`: drives outputs via config (`fullfade` uses range; `segmentsolid` uses bindings A/B).
+- `testoutput <app>.<mode> <value>`: drives outputs via config (`crossfade` uses range; `segmentsolid` uses bindings A/B).
 - `testoutput idle`: apply idle color/brightness to all segments.
 - `loadpreset <controller> <preset>`: apply a WLED preset by id or name.
 - `getpreset <controller>`: show the current preset on a controller.
