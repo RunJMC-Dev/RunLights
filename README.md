@@ -33,7 +33,7 @@ Inputs
 - `CLI`: input is provided by the named-pipe CLI (used for ES-DE console selection).
 
 Outputs
-- `fullfade`: map a numeric value to overall brightness/color on one or more controllers.
+- `fullfade`: map a numeric value to overall brightness/color on one or more controllers (uses `minvalue`/`maxvalue`).
 - `segmentsolid`: apply A/B colors to segments, highlighting a bound target segment.
 - `segmentpercent`: fill a percentage of segments based on a numeric value.
 

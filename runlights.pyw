@@ -897,8 +897,6 @@ def _run_debug_window(
                 output_form.setContentsMargins(0, 0, 0, 0)
                 out_controllers = QtWidgets.QLineEdit()
                 out_controllers.setPlaceholderText("e.g. PCROOMLHS, PCROOMRHS")
-                out_rangelow = QtWidgets.QLineEdit()
-                out_rangehigh = QtWidgets.QLineEdit()
                 out_minvalue = QtWidgets.QLineEdit()
                 out_maxvalue = QtWidgets.QLineEdit()
                 out_acolor = QtWidgets.QLineEdit()
@@ -907,8 +905,6 @@ def _run_debug_window(
                 out_bbri = QtWidgets.QLineEdit()
                 out_segment_reverse = QtWidgets.QCheckBox("Reverse segment order")
                 output_form.addRow("Controllers", out_controllers)
-                output_form.addRow("Range low", out_rangelow)
-                output_form.addRow("Range high", out_rangehigh)
                 output_form.addRow("Min value", out_minvalue)
                 output_form.addRow("Max value", out_maxvalue)
                 output_form.addRow("A color", out_acolor)
@@ -955,8 +951,6 @@ def _run_debug_window(
                     input_w.setText(str(existing.get("width", "")).strip())
                     input_h.setText(str(existing.get("height", "")).strip())
                     out_controllers.setText(", ".join(existing.get("controllers", []) or []))
-                    out_rangelow.setText(str(existing.get("rangelow", "")).strip())
-                    out_rangehigh.setText(str(existing.get("rangehigh", "")).strip())
                     out_minvalue.setText(str(existing.get("minvalue", "")).strip())
                     out_maxvalue.setText(str(existing.get("maxvalue", "")).strip())
                     out_acolor.setText(str(existing.get("acolor", "")).strip())
@@ -1009,8 +1003,6 @@ def _run_debug_window(
                         if controllers:
                             result["controllers"] = controllers
                         if output_sel == "fullfade":
-                            result["rangelow"] = _to_float(out_rangelow.text())
-                            result["rangehigh"] = _to_float(out_rangehigh.text())
                             result["minvalue"] = _to_float(out_minvalue.text())
                             result["maxvalue"] = _to_float(out_maxvalue.text())
                         if output_sel in ("segmentsolid", "segmentpercent"):
@@ -1682,15 +1674,6 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             controllers_filter = [legacy_controller]
         if not controllers_filter:
             log_message("fullfade missing controllers")
-            return
-        try:
-            rlo = float(mode.get("rangelow", 0))
-            rhi = float(mode.get("rangehigh", 100))
-        except Exception:
-            log_message("Invalid range for mode")
-            return
-        if rhi <= rlo:
-            log_message("Invalid range for mode")
             return
         try:
             minv = float(mode.get("minvalue", 0))
