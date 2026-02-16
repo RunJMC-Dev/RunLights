@@ -407,7 +407,7 @@ def _run_debug_window(
                 "loadpreset ",
                 "getpreset ",
                 "tasksearch ",
-                "addapp",
+                "appconfig",
                 "reloadconfig",
                 "help",
                 "?",
@@ -476,12 +476,12 @@ def _run_debug_window(
                     "  getpreset <controller>     - show the current preset on a controller",
                     "  ocroverlay <app>.<mode>    - toggle green overlay on a screen_region",
                     "  tasksearch <term>          - list running tasks that contain term",
-                    "  addapp                     - open dialog to add an application to config.toml",
+                    "  appconfig                  - open dialog to add/configure an application",
                     "  reloadconfig               - reload config.toml (threads keep old config)",
                 ]
                 self.append_line("\n".join(help_lines))
-            elif cmd == "addapp":
-                self._show_add_app_dialog()
+            elif cmd in ("appconfig", "addapp"):
+                self._show_app_config_dialog()
             elif cmd.startswith("ocrtest"):
                 if pytesseract is None:
                     self.append_line("OCR unavailable: pytesseract not installed")
@@ -723,7 +723,7 @@ def _run_debug_window(
             else:
                 self.append_line(f"Unknown command: {cmd}")
 
-        def _show_add_app_dialog(self):
+        def _show_app_config_dialog(self):
             dialog = QtWidgets.QDialog(self)
             dialog.setWindowTitle("Add Application")
             dialog.setModal(True)
@@ -753,7 +753,19 @@ def _run_debug_window(
             conflict_label = QtWidgets.QLabel("")
             conflict_label.setStyleSheet("color: #c62828;")
 
+            app_picker = QtWidgets.QComboBox()
+            app_picker.addItem("New App")
+            apps_by_id = {}
+            if cfg_raw_global:
+                for app in cfg_raw_global.get("application", []):
+                    app_id_val = str(app.get("id", "")).strip()
+                    if not app_id_val:
+                        continue
+                    apps_by_id[app_id_val] = app
+                    app_picker.addItem(app_id_val)
+
             form.addRow(_section_label("Application"), QtWidgets.QLabel(""))
+            form.addRow("Select app", app_picker)
             form.addRow("Id", app_id)
             form.addRow("Friendly name", friendly)
             form.addRow("", conflict_label)
@@ -1006,6 +1018,91 @@ def _run_debug_window(
             output_mode.currentIndexChanged.connect(_toggle_output_opts)
             _toggle_input_opts()
             _toggle_output_opts()
+
+            def _set_text(widget, value):
+                try:
+                    widget.blockSignals(True)
+                    widget.setText(value or "")
+                finally:
+                    widget.blockSignals(False)
+
+            def _set_combo(widget, value, default="None"):
+                try:
+                    widget.blockSignals(True)
+                    if value:
+                        idx = widget.findText(str(value))
+                        widget.setCurrentIndex(idx if idx >= 0 else widget.findText(default))
+                    else:
+                        widget.setCurrentIndex(widget.findText(default))
+                finally:
+                    widget.blockSignals(False)
+
+            def _populate_from_app(app):
+                _set_text(app_id, str(app.get("id", "")).strip())
+                _set_text(friendly, str(app.get("friendlyname", "")).strip())
+                procs = app.get("processes", []) or []
+                _set_text(process, str(procs[0]).strip() if procs else "")
+                modes = app.get("modes", []) or []
+                mode = modes[0] if modes else {}
+                _set_text(mode_id, str(mode.get("id", "")).strip())
+                _set_combo(input_mode, mode.get("input"))
+                _set_combo(output_mode, mode.get("output"))
+                _set_text(input_x, str(mode.get("x", "")).strip())
+                _set_text(input_y, str(mode.get("y", "")).strip())
+                _set_text(input_w, str(mode.get("width", "")).strip())
+                _set_text(input_h, str(mode.get("height", "")).strip())
+                _set_text(out_controllers, ", ".join(mode.get("controllers", []) or []))
+                _set_text(out_rangelow, str(mode.get("rangelow", "")).strip())
+                _set_text(out_rangehigh, str(mode.get("rangehigh", "")).strip())
+                _set_text(out_minvalue, str(mode.get("minvalue", "")).strip())
+                _set_text(out_maxvalue, str(mode.get("maxvalue", "")).strip())
+                _set_text(out_acolor, str(mode.get("acolor", "")).strip())
+                _set_text(out_abri, str(mode.get("abrightness", "")).strip())
+                _set_text(out_bcolor, str(mode.get("bcolor", "")).strip())
+                _set_text(out_bbri, str(mode.get("bbrightness", "")).strip())
+                out_segment_reverse.setChecked(bool(mode.get("segmentorderreverse", False)))
+                _dismiss_popup()
+                _toggle_input_opts()
+                _toggle_output_opts()
+                refresh_conflict()
+
+            def _clear_fields():
+                _set_text(app_id, "")
+                _set_text(friendly, "")
+                _set_text(process, "")
+                _set_text(mode_id, "")
+                _set_combo(input_mode, None)
+                _set_combo(output_mode, None)
+                _set_text(input_x, "")
+                _set_text(input_y, "")
+                _set_text(input_w, "")
+                _set_text(input_h, "")
+                _set_text(out_controllers, "")
+                _set_text(out_rangelow, "")
+                _set_text(out_rangehigh, "")
+                _set_text(out_minvalue, "")
+                _set_text(out_maxvalue, "")
+                _set_text(out_acolor, "")
+                _set_text(out_abri, "")
+                _set_text(out_bcolor, "")
+                _set_text(out_bbri, "")
+                out_segment_reverse.setChecked(False)
+                _dismiss_popup()
+                _toggle_input_opts()
+                _toggle_output_opts()
+                refresh_conflict()
+
+            def _on_app_picker_change():
+                name = app_picker.currentText()
+                if name == "New App":
+                    _clear_fields()
+                else:
+                    app = apps_by_id.get(name)
+                    if app:
+                        _populate_from_app(app)
+
+            app_picker.currentIndexChanged.connect(_on_app_picker_change)
+            _on_app_picker_change()
 
             def on_accept():
                 def _to_int(text: str):
