@@ -39,6 +39,7 @@ Outputs
 
 ## ESDE integration
 - Minimal standalone helper: `python standalone_cli.py <console>` (or place alongside ES-DE scripts; it reads `argv[3]` too). It sends the console name over the named pipe; if the tray isn’t running it no-ops without crashing ES-DE.
+- Restart tray: `python standalone_cli.py restart` (best-effort; requires `psutil` to target the correct process).
 - Only `/scripts/game-select` is needed; process detection handles startup/quit.
 
 ## Debug window commands

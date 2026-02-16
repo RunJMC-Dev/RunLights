@@ -236,7 +236,23 @@ def _run_debug_window(
             layout.setContentsMargins(10, 6, 10, 10)
             layout.setSpacing(6)
 
-            self.log_box = QtWidgets.QPlainTextEdit()
+            class _LogBox(QtWidgets.QPlainTextEdit):
+                def __init__(self, parent):
+                    super().__init__(parent)
+                    self._focus_target = None
+
+                def set_focus_target(self, target):
+                    self._focus_target = target
+
+                def mousePressEvent(self, event):  # type: ignore[override]
+                    try:
+                        if self._focus_target:
+                            self._focus_target.setFocus()
+                    except Exception:
+                        pass
+                    return super().mousePressEvent(event)
+
+            self.log_box = _LogBox(central)
             self.log_box.setReadOnly(True)
             font = QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.FixedFont)
             font.setPointSize(10)
@@ -343,6 +359,7 @@ def _run_debug_window(
             self.input.setPlaceholderText("Enter command (showapplications, testoutput ...)")
             self._build_completer()
             self.send_btn = QtWidgets.QPushButton("Send")
+            self.log_box.set_focus_target(self.input)
             input_row.addWidget(self.input, stretch=1)
             input_row.addWidget(self.send_btn)
             layout.addLayout(input_row)
@@ -713,6 +730,18 @@ def _run_debug_window(
 
             form = QtWidgets.QFormLayout(dialog)
             form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+            form.setRowWrapPolicy(QtWidgets.QFormLayout.DontWrapRows)
+
+            def _section_label(text: str) -> QtWidgets.QLabel:
+                label = QtWidgets.QLabel(text)
+                label.setStyleSheet("font-weight: 600; padding-top: 6px;")
+                return label
+
+            def _section_line() -> QtWidgets.QFrame:
+                line = QtWidgets.QFrame(dialog)
+                line.setFrameShape(QtWidgets.QFrame.HLine)
+                line.setFrameShadow(QtWidgets.QFrame.Sunken)
+                return line
 
             app_id = QtWidgets.QLineEdit()
             app_id.setPlaceholderText("e.g. starrapture")
@@ -724,10 +753,17 @@ def _run_debug_window(
             conflict_label = QtWidgets.QLabel("")
             conflict_label.setStyleSheet("color: #c62828;")
 
+            form.addRow(_section_label("Application"), QtWidgets.QLabel(""))
             form.addRow("Id", app_id)
             form.addRow("Friendly name", friendly)
             form.addRow("", conflict_label)
             form.addRow("Process", process)
+            form.addRow(_section_line(), QtWidgets.QLabel(""))
+
+            form.addRow(_section_label("Input"), QtWidgets.QLabel(""))
+            form.addRow(_section_line(), QtWidgets.QLabel(""))
+
+            form.addRow(_section_label("Output"), QtWidgets.QLabel(""))
 
             buttons = QtWidgets.QDialogButtonBox(
                 QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
@@ -777,72 +813,94 @@ def _run_debug_window(
                 except Exception:
                     process_names = []
 
-            showing_picker = {"active": False}
+            process_popup = QtWidgets.QListWidget(dialog)
+            process_popup.setWindowFlags(QtCore.Qt.ToolTip | QtCore.Qt.FramelessWindowHint)
+            process_popup.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+            process_popup.setUniformItemSizes(True)
+            process_popup.setFocusPolicy(QtCore.Qt.NoFocus)
+            process_popup.setVisible(False)
+            process_popup.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
 
-            def _show_process_picker(initial_text: str):
-                if showing_picker["active"]:
-                    return
-                if not process_names:
-                    return
-                term = initial_text.strip().lower()
-                if not term:
+            def _position_process_popup():
+                top_left = process.mapToGlobal(QtCore.QPoint(0, process.height()))
+                width = max(260, process.width())
+                process_popup.setGeometry(top_left.x(), top_left.y(), width, 180)
+
+            def _refresh_process_popup():
+                term = process.text().strip().lower()
+                process_popup.clear()
+                if not term or not process_names:
+                    process_popup.setVisible(False)
                     return
                 matches = [p for p in process_names if term in p.lower()]
                 if not matches:
+                    process_popup.setVisible(False)
                     return
-                showing_picker["active"] = True
+                for name in matches[:100]:
+                    process_popup.addItem(name)
+                _position_process_popup()
+                process_popup.setCurrentRow(0)
+                process_popup.setVisible(True)
+                process_popup.raise_()
 
-                picker = QtWidgets.QDialog(dialog)
-                picker.setWindowTitle("Select Process")
-                picker.setModal(True)
+            def _accept_process_selection():
+                item = process_popup.currentItem()
+                if item:
+                    process.setText(item.text())
+                process_popup.setVisible(False)
 
-                layout = QtWidgets.QVBoxLayout(picker)
-                filter_box = QtWidgets.QLineEdit()
-                filter_box.setPlaceholderText("Type to filter...")
-                filter_box.setText(initial_text)
-                layout.addWidget(filter_box)
+            def _dismiss_popup():
+                process_popup.setVisible(False)
 
-                list_box = QtWidgets.QListWidget()
-                list_box.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-                layout.addWidget(list_box)
+            def _on_process_text_changed():
+                _refresh_process_popup()
+                refresh_conflict()
 
-                buttons = QtWidgets.QDialogButtonBox(
-                    QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
-                )
-                layout.addWidget(buttons)
+            process.textChanged.connect(_on_process_text_changed)
+            process_popup.itemClicked.connect(lambda _=None: _accept_process_selection())
 
-                def refresh_list():
-                    term_local = filter_box.text().strip().lower()
-                    list_box.clear()
-                    if not term_local:
-                        return
-                    for name in [p for p in process_names if term_local in p.lower()][:200]:
-                        list_box.addItem(name)
-                    if list_box.count() > 0:
-                        list_box.setCurrentRow(0)
+            def _filter_event(obj, event):
+                if obj is process and event.type() == QtCore.QEvent.KeyPress:
+                    if event.key() in (QtCore.Qt.Key_Down, QtCore.Qt.Key_Up):
+                        if process_popup.isVisible():
+                            current = process_popup.currentRow()
+                            if current < 0:
+                                current = 0
+                            if event.key() == QtCore.Qt.Key_Down:
+                                current = min(process_popup.count() - 1, current + 1)
+                            else:
+                                current = max(0, current - 1)
+                            process_popup.setCurrentRow(current)
+                            return True
+                    if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                        if process_popup.isVisible():
+                            _accept_process_selection()
+                            return True
+                    if event.key() == QtCore.Qt.Key_Escape:
+                        _dismiss_popup()
+                        return True
+                if obj is process_popup and event.type() == QtCore.QEvent.KeyPress:
+                    if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+                        _accept_process_selection()
+                        return True
+                    if event.key() == QtCore.Qt.Key_Escape:
+                        _dismiss_popup()
+                        return True
+                if obj is dialog and event.type() == QtCore.QEvent.MouseButtonPress:
+                    if process_popup.isVisible():
+                        pos = event.globalPosition().toPoint()
+                        if not process_popup.geometry().contains(pos) and not process.geometry().contains(process.mapFromGlobal(pos)):
+                            _dismiss_popup()
+                return False
 
-                def accept_selection():
-                    item = list_box.currentItem()
-                    if item:
-                        process.setText(item.text())
-                    picker.accept()
+            class _ProcessPopupFilter(QtCore.QObject):
+                def eventFilter(self, obj, event):  # type: ignore[override]
+                    return _filter_event(obj, event)
 
-                filter_box.textChanged.connect(refresh_list)
-                list_box.itemDoubleClicked.connect(lambda _=None: accept_selection())
-                buttons.accepted.connect(accept_selection)
-                buttons.rejected.connect(picker.reject)
-
-                refresh_list()
-                filter_box.setFocus()
-                picker.exec()
-                showing_picker["active"] = False
-
-            def handle_process_change():
-                if showing_picker["active"]:
-                    return
-                _show_process_picker(process.text())
-
-            process.textChanged.connect(handle_process_change)
+            popup_filter = _ProcessPopupFilter(dialog)
+            process.installEventFilter(popup_filter)
+            process_popup.installEventFilter(popup_filter)
+            dialog.installEventFilter(popup_filter)
 
             def on_accept():
                 app_id_val = app_id.text().strip()
