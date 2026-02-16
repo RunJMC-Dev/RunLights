@@ -2533,8 +2533,15 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
         return
     seen: set[str] = set()
     active_app: str | None = None
+    last_foreground_app: str | None = None
     stored_presets: dict[str, int | None] = {}
     gaming_preset = cfg_raw.get("gaming_preset", "Gaming")
+    try:
+        import win32gui  # type: ignore
+        import win32process  # type: ignore
+    except Exception:
+        win32gui = None
+        win32process = None
     try:
         while not stop_event.is_set():
             if PAUSE_EVENT.is_set():
@@ -2573,6 +2580,20 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                         _restore_presets(cfg_raw, stored_presets, log_message)
                         if cfg_raw.get("idle"):
                             _apply_idle(cfg_raw, log_message)
+                # Log when the active app becomes the foreground window.
+                if active_app and win32gui and win32process:
+                    try:
+                        hwnd = win32gui.GetForegroundWindow()
+                        if hwnd:
+                            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                            proc_name = (psutil.Process(pid).name() or "").lower()
+                            fg_app = watch.get(proc_name)
+                            if fg_app != last_foreground_app:
+                                last_foreground_app = fg_app
+                                if fg_app == active_app:
+                                    log_message(f"Active window: {fg_app}")
+                    except Exception:
+                        pass
                 seen = current
             except Exception as exc:
                 log_message(f"Process watch error: {exc}")
