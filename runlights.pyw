@@ -1378,7 +1378,7 @@ def _run_debug_window(
                 msg = ""
                 app_id_val = app_id.text().strip().lower()
                 friendly_val = friendly.text().strip().lower()
-                is_new = app_picker.currentData() is None
+                is_new = selected_app_id["value"] is None
                 current_id = selected_app_id["value"]
                 if app_id_val and app_id_val in existing_ids:
                     if is_new or (current_id and app_id_val != current_id.lower()):
@@ -1560,10 +1560,10 @@ def _run_debug_window(
                     return
                 if cfg_raw_global:
                     existing = {str(a.get("id", "")).lower() for a in cfg_raw_global.get("application", [])}
-                    if app_id_val.lower() in existing and app_picker.currentData() is None:
+                    if app_id_val.lower() in existing and selected_app_id["value"] is None:
                         QtWidgets.QMessageBox.warning(dialog, "Add Application", "That id already exists.")
                         return
-                update_id = None if app_picker.currentData() is None else selected_app_id["value"]
+                update_id = None if selected_app_id["value"] is None else selected_app_id["value"]
                 if _upsert_application_in_config(
                     CONFIG_PATH,
                     app_id_val,
