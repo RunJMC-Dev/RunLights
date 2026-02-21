@@ -1463,7 +1463,7 @@ def _run_debug_window(
                     if output_sel in ("crossfade", "fade"):
                         result["minvalue"] = _to_float(out_minvalue.text())
                         result["maxvalue"] = _to_float(out_maxvalue.text())
-                    if output_sel in ("segmentsolid", "segmentpercent"):
+                    if output_sel in ("crossfade", "segmentsolid", "segmentpercent"):
                         result["acolor"] = out_acolor.text().strip()
                         result["abrightness"] = out_abri.value()
                         result["bcolor"] = out_bcolor.text().strip()
