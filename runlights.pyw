@@ -1178,6 +1178,10 @@ def _run_debug_window(
                 b_bri_layout.addWidget(out_bbri, stretch=1)
                 b_bri_layout.addWidget(b_bri_label)
                 out_segment_reverse = QtWidgets.QCheckBox("Reverse segment order")
+                danger_type = QtWidgets.QComboBox()
+                danger_type.addItems(["", "flash"])
+                danger_threshold = QtWidgets.QLineEdit()
+                danger_threshold.setPlaceholderText("e.g. 20")
                 lbl_controllers = QtWidgets.QLabel("Controllers")
                 lbl_minvalue = QtWidgets.QLabel("Min value")
                 lbl_maxvalue = QtWidgets.QLabel("Max value")
@@ -1186,6 +1190,8 @@ def _run_debug_window(
                 lbl_bcolor = QtWidgets.QLabel("B color")
                 lbl_bbri = QtWidgets.QLabel("B brightness")
                 lbl_reverse = QtWidgets.QLabel("")
+                lbl_danger_type = QtWidgets.QLabel("Danger type")
+                lbl_danger_threshold = QtWidgets.QLabel("Danger threshold")
 
                 output_form.addRow(lbl_controllers, out_controllers)
                 output_form.addRow(lbl_minvalue, out_minvalue)
@@ -1195,6 +1201,8 @@ def _run_debug_window(
                 output_form.addRow(lbl_bcolor, b_color_wrap)
                 output_form.addRow(lbl_bbri, b_bri_wrap)
                 output_form.addRow(lbl_reverse, out_segment_reverse)
+                output_form.addRow(lbl_danger_type, danger_type)
+                output_form.addRow(lbl_danger_threshold, danger_threshold)
                 form.addRow("", output_group)
 
                 status = QtWidgets.QLabel("")
@@ -1257,6 +1265,8 @@ def _run_debug_window(
 
                     # Reverse only for segmentpercent
                     _show(out_segment_reverse, show_segmentpercent)
+                    _show(danger_type, out_mode != "None")
+                    _show(danger_threshold, out_mode != "None")
 
                 input_mode.currentIndexChanged.connect(_toggle_groups)
                 output_mode.currentIndexChanged.connect(_toggle_groups)
@@ -1291,6 +1301,13 @@ def _run_debug_window(
                     except Exception:
                         out_bbri.setValue(0)
                     out_segment_reverse.setChecked(bool(existing.get("segmentorderreverse", False)))
+                    try:
+                        danger_type.setCurrentIndex(
+                            max(0, danger_type.findText(str(existing.get("dangertype", "")).strip(), QtCore.Qt.MatchFixedString))
+                        )
+                    except Exception:
+                        danger_type.setCurrentIndex(0)
+                    danger_threshold.setText(str(existing.get("dangerthreshold", "")).strip())
                 else:
                     # Defaults for new crossfade setups
                     out_minvalue.setText("0")
@@ -1340,6 +1357,11 @@ def _run_debug_window(
                         result["bcolor"] = out_bcolor.text().strip()
                         result["bbrightness"] = out_bbri.value()
                         result["segmentorderreverse"] = out_segment_reverse.isChecked()
+                        if danger_type.currentText().strip():
+                            result["dangertype"] = danger_type.currentText().strip()
+                        danger_thresh_val = _to_float(danger_threshold.text())
+                        if danger_thresh_val is not None:
+                            result["dangerthreshold"] = danger_thresh_val
                     return result
 
                 test_timer = QtCore.QTimer(dlg)
@@ -1476,6 +1498,12 @@ def _run_debug_window(
                         result["minvalue"] = _to_float(out_minvalue.text())
                         result["maxvalue"] = _to_float(out_maxvalue.text())
                         result["segmentorderreverse"] = out_segment_reverse.isChecked()
+                    if output_sel != "None":
+                        if danger_type.currentText().strip():
+                            result["dangertype"] = danger_type.currentText().strip()
+                        danger_thresh_val = _to_float(danger_threshold.text())
+                        if danger_thresh_val is not None:
+                            result["dangerthreshold"] = danger_thresh_val
                     result_holder["value"] = result
                     dlg.accept()
 

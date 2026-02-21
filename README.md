@@ -79,6 +79,7 @@ Outputs
 - `reloadconfig`: reload config.toml (threads keep old config).
 - Mode editor test output is automatically stopped when the dialog closes.
 - Mode editor test output applies `gaming_preset` on start and `idle_preset` on stop/close.
+- Mode editor exposes danger flash settings (type + threshold) and uses them for test output.
 
 ## Tray IPC (Windows)
 - IPC uses a Windows named pipe: `\\.\pipe\runlights_ipc` (requires `pywin32`).
