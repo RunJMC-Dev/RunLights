@@ -480,7 +480,7 @@ def _run_debug_window(
                 "showcontrollers",
                 "ocrtest",
                 "ocroverlay ",
-                "textoverlay ",
+                "notify ",
                 "testoutput idle",
                 "testoutput ",
                 "loadpreset ",
@@ -559,7 +559,7 @@ def _run_debug_window(
                     "  loadpreset <controller> <preset> - apply a WLED preset by id or name",
                     "  getpreset <controller>     - show the current preset on a controller",
                     "  ocroverlay <app>.<mode>    - toggle green overlay on a screen_region",
-                    "  textoverlay <message>      - show a top-center overlay for 10s",
+                    "  notify <message>           - show a top-center overlay for 10s",
                     "  tasksearch <term>          - list running tasks that contain term",
                     "  appconfig                  - open dialog to add/configure an application",
                     "  reloadconfig               - reload config.toml (threads keep old config)",
@@ -779,10 +779,10 @@ def _run_debug_window(
                         pass
                     self._overlay_target = target
                     self.append_line(f"OCR overlay shown for {target} at {region}")
-            elif cmd.startswith("textoverlay"):
-                message = raw_cmd[len("textoverlay"):].strip()
+            elif cmd.startswith("notify"):
+                message = raw_cmd[len("notify"):].strip()
                 if not message:
-                    self.append_line("Usage: textoverlay <message>")
+                    self.append_line("Usage: notify <message>")
                     return
                 self._show_text_overlay(message, duration_s=10)
                 self.append_line("Text overlay shown for 10s")

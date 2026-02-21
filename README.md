@@ -67,7 +67,7 @@ Outputs
 - `loadpreset <controller> <preset>`: apply a WLED preset by id or name.
 - `getpreset <controller>`: show the current preset on a controller.
 - `ocroverlay <app>.<mode>`: toggle a green overlay on a screen_region mode.
-- `textoverlay <message>`: show a top-center text overlay for 10s.
+- `notify <message>`: show a top-center text overlay for 10s.
 - `tasksearch <term>`: list running tasks that contain term.
 - `appconfig`: opens a dialog to add/configure an `[[application]]` entry (includes a process picker and optional input/output mode settings).
 - `reloadconfig`: reload config.toml (threads keep old config).
