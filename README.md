@@ -30,7 +30,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - `notification` block controls the `notify` debug overlay (duration seconds, font, fontsize, fontcolour, padding, bodycolour, bodyopacity 0-100, border px, align topcenter).
 - `mqtt` block enables Home Assistant notifications over MQTT; it subscribes to a topic and expects JSON with a `message` field (everything else ignored).
 - For `screen_region` inputs, set `interval_ms` on a mode to control OCR refresh rate (default 1000ms).
-- `segmentpercent` supports `dangertype = "flash"` with `dangerthreshold` (numeric, compared to input value).
+- Outputs support `dangertype = "flash"` with `dangerthreshold` (numeric, compared to input value).
 
 ## Mode Inputs/Outputs
 Inputs

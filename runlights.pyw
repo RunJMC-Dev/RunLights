@@ -2623,6 +2623,25 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
         output_type = "crossfade"
     color = mode.get("color") or mode.get("acolor") or mode.get("bcolor") or "#ffffff"
     transition = cfg_raw.get("default_transition_ms")
+    danger_type = str(mode.get("dangertype", "")).strip().lower()
+    try:
+        danger_threshold = float(mode.get("dangerthreshold", -1))
+    except Exception:
+        danger_threshold = -1
+
+    def _danger_state(val) -> tuple[bool, bool]:
+        try:
+            val_f = float(val)
+        except Exception:
+            num = _extract_number(str(val)) if val is not None else None
+            if num is None:
+                return False, True
+            val_f = num
+        active = danger_threshold >= 0 and val_f <= danger_threshold
+        if not active or danger_type != "flash":
+            return active, True
+        flash_on = int(time.monotonic() * 2) % 2 == 0
+        return active, flash_on
 
     if output_type == "crossfade":
         controllers_filter = list(mode.get("controllers", []) or [])
@@ -2672,6 +2691,10 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
         if max_bri < min_bri:
             min_bri, max_bri = max_bri, min_bri
         mix_bri = max(min_bri, min(max_bri, mix_bri))
+        danger_active, flash_on = _danger_state(val_f)
+        if danger_active and danger_type == "flash" and not flash_on:
+            mix_rgb = b_rgb
+            mix_bri = 0
         for controller_id in controllers_filter:
             ctrl = _lookup_controller(cfg_raw, controller_id) if controller_id else None
             if not ctrl:
@@ -2758,6 +2781,9 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
         if max_bri < min_bri:
             min_bri, max_bri = max_bri, min_bri
         mix_bri = max(min_bri, min(max_bri, mix_bri))
+        danger_active, flash_on = _danger_state(val_f)
+        if danger_active and danger_type == "flash" and not flash_on:
+            mix_bri = 0
         for controller_id in controllers_filter:
             ctrl = _lookup_controller(cfg_raw, controller_id) if controller_id else None
             if not ctrl:
@@ -2813,6 +2839,7 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
         if not binding:
             log_message(f"Binding '{value}' not found")
             return
+        danger_active, flash_on = _danger_state(value)
         target_controllers = list(binding.get("controllers", []) or [])
         legacy_controller = binding.get("controller")
         if legacy_controller and not target_controllers:
@@ -2844,8 +2871,12 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             for seg in segments:
                 seg_id = seg.get("id")
                 is_target = cid in target_controllers and seg_id == target_segment
-                seg_color = acolor if is_target else bcolor
-                seg_bri = abri if is_target else bbri
+                if danger_active and danger_type == "flash" and is_target and not flash_on:
+                    seg_color = bcolor
+                    seg_bri = bbri
+                else:
+                    seg_color = acolor if is_target else bcolor
+                    seg_bri = abri if is_target else bbri
                 seg_on = seg_bri > 0
                 seg_updates.append(
                     wled.WLEDPayload(
@@ -2880,15 +2911,7 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
         except Exception:
             log_message("segmentpercent expects a numeric value")
             return
-        danger_type = str(mode.get("dangertype", "")).strip().lower()
-        try:
-            danger_threshold = float(mode.get("dangerthreshold", -1))
-        except Exception:
-            danger_threshold = -1
-        danger_active = danger_threshold >= 0 and val_f <= danger_threshold
-        flash_on = True
-        if danger_active and danger_type == "flash":
-            flash_on = int(time.monotonic() * 2) % 2 == 0
+        danger_active, flash_on = _danger_state(val_f)
         try:
             minv = float(mode.get("minvalue", 0))
             maxv = float(mode.get("maxvalue", 100))
