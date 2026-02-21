@@ -3601,6 +3601,8 @@ def main() -> int:
             debug_ui.app.processEvents()
         except Exception:
             pass
+    if cfg_raw is not None:
+        _apply_idle_preset(cfg_raw, log_message)
     return 0
 
 
