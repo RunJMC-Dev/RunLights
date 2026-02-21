@@ -1790,7 +1790,11 @@ def _run_debug_window(
             duration.setRange(1, 120)
             duration.setValue(_int_val(current.get("duration", 10), 10))
 
-            font = QtWidgets.QLineEdit(str(current.get("font", "")).strip())
+            font = QtWidgets.QFontComboBox()
+            font.setEditable(False)
+            font_current = str(current.get("font", "")).strip()
+            if font_current:
+                font.setCurrentFont(QtGui.QFont(font_current))
             fontsize = QtWidgets.QSpinBox()
             fontsize.setRange(8, 96)
             fontsize.setValue(_int_val(current.get("fontsize", 24), 24))
@@ -1841,7 +1845,7 @@ def _run_debug_window(
             def _collect_settings():
                 return {
                     "duration": duration.value(),
-                    "font": font.text().strip(),
+                    "font": font.currentFont().family().strip(),
                     "fontsize": fontsize.value(),
                     "fontcolour": fontcolour.text().strip() or "#FFFFFF",
                     "padding": padding.value(),
