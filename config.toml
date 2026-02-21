@@ -9,6 +9,17 @@ default_transition_ms = 150   # Crossfade time for REST updates to smooth change
 debug = true
 gaming_preset = "Gaming"      # Default preset to use when a game starts (per-controller override below).
 
+[notification]
+duration = 10
+font = "alegraya sans sc"
+fontsize = "24"
+fontcolour = "#FFFFFF"
+padding = 6
+bodycolour = "#000000"
+bodyopacity = 50
+border = 0
+align = "topcenter"
+
 
 # Define your WLED controllers here.
 [[controllers]]
@@ -251,7 +262,46 @@ processes = ["ES-DE.exe"]
   steam = { controller = "PCROOMMIDDLE", segment = 0 }
   
 
+
+
+
+
+
+
 [[application]]
 id = "doomdarkages"
 friendlyname = "Doom The Dark Ages"
 processes = ["DOOMTheDarkAges.exe"]
+
+  [[application.modes]]
+  id = "armor"
+  input = "screen_region"
+  output = "fade"
+  x = 1060
+  y = 1320
+  width = 100
+  height = 60
+  controllers = ["PCROOMLHS"]
+  minvalue = 0.0
+  maxvalue = 255.0
+  acolor = "#0000ff"
+  abrightness = 0
+  bbrightness = 255
+
+  [[application.modes]]
+  id = "health"
+  input = "screen_region"
+  output = "fade"
+  x = 1396
+  y = 1320
+  width = 100
+  height = 60
+  inputrangemin = 0.0
+  inputrangemax = 100.0
+  controllers = ["PCROOMRHS"]
+  minvalue = 0.0
+  maxvalue = 255.0
+  acolor = "#aa0000"
+  abrightness = 0
+  bbrightness = 255
+

@@ -26,6 +26,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - Modes are keyed off process names; can include screen-region inputs, range mapping, and outputs such as `crossfade` (whole strip brightness from range) and `segmentsolid` (target segment vs others with A/B colors/brightness).
 - `idle` block defines color/brightness/transition when idle or when watched apps close.
 - ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` for `segmentsolid`.
+- `notification` block controls the `notify` debug overlay (duration seconds, font, fontsize, fontcolour, padding, bodycolour, bodyopacity 0-100, border px, align topcenter).
 
 ## Mode Inputs/Outputs
 Inputs

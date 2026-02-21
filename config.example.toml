@@ -7,6 +7,17 @@ config_version = 1
 update_interval_ms = 500      # How often to send REST updates (tweak for performance).
 default_transition_ms = 150   # Crossfade time for REST updates to smooth changes.
 
+[notification]
+duration = 10
+font = "alegraya sans sc"
+fontsize = "24"
+fontcolour = "#FFFFFF"
+padding = 6
+bodycolour = "#000000"
+bodyopacity = 50
+border = 0
+align = "topcenter"
+
 [[controllers]]
 # Use an ID for references (no spaces). "name" is display-only.
 id = "shelf"

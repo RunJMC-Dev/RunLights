@@ -367,21 +367,45 @@ def _run_debug_window(
                     layout = QtWidgets.QHBoxLayout(self)
                     layout.setContentsMargins(0, 0, 0, 0)
                     self.label = QtWidgets.QLabel(self)
-                    font = self.label.font()
-                    font.setPointSize(14)
-                    font.setBold(True)
-                    self.label.setFont(font)
-                    self.label.setStyleSheet(
-                        "color: #f5f5f5; background: rgba(24,24,24,220);"
-                        "border: 1px solid rgba(200,200,200,160);"
-                        "padding: 8px 14px; border-radius: 6px;"
-                    )
+                    self._base_font = self.label.font()
+                    self._base_font.setBold(True)
+                    self.label.setFont(self._base_font)
                     layout.addWidget(self.label)
 
                 def set_text(self, text: str):
                     self.label.setText(text)
                     self.label.adjustSize()
                     self.adjustSize()
+
+                def apply_style(
+                    self,
+                    *,
+                    font_family: str | None,
+                    font_size: int,
+                    font_color: str,
+                    body_color: str,
+                    body_alpha: int,
+                    padding: int,
+                    border: int,
+                ):
+                    font = QtGui.QFont(self._base_font)
+                    if font_family:
+                        font.setFamily(font_family)
+                    font.setPointSize(max(8, int(font_size)))
+                    self.label.setFont(font)
+                    border_css = "none" if border <= 0 else f"{border}px solid rgba(200,200,200,160)"
+                    self.label.setStyleSheet(
+                        "color: {font_color}; background: rgba({r},{g},{b},{a});"
+                        "border: {border}; padding: {padding}px; border-radius: 6px;".format(
+                            font_color=font_color,
+                            r=body_color[0],
+                            g=body_color[1],
+                            b=body_color[2],
+                            a=body_alpha,
+                            border=border_css,
+                            padding=max(0, int(padding)),
+                        )
+                    )
 
             self.text_overlay_cls = TextOverlay
 
@@ -823,8 +847,46 @@ def _run_debug_window(
                 self.text_overlay.hide()
 
         def _show_text_overlay(self, message: str, duration_s: int = 10):
+            def _int_val(value, default):
+                try:
+                    return int(float(value))
+                except Exception:
+                    return default
+
+            cfg = {}
+            if cfg_raw_global:
+                cfg = cfg_raw_global.get("notification", {}) or {}
+
+            duration_cfg = _int_val(cfg.get("duration", duration_s), duration_s)
+            font_family = str(cfg.get("font", "")).strip() or None
+            font_size = _int_val(cfg.get("fontsize", 24), 24)
+            font_color = str(cfg.get("fontcolour", "#FFFFFF")).strip() or "#FFFFFF"
+            padding = _int_val(cfg.get("padding", 6), 6)
+            body_color_hex = str(cfg.get("bodycolour", "#000000")).strip() or "#000000"
+            body_opacity = _int_val(cfg.get("bodyopacity", 50), 50)
+            body_opacity = max(0, min(100, body_opacity))
+            border = _int_val(cfg.get("border", 0), 0)
+            align = str(cfg.get("align", "topcenter")).strip().lower()
+
+            try:
+                body_color = wled._hex_to_rgb(body_color_hex)
+            except Exception:
+                body_color = (0, 0, 0)
+
             if not self.text_overlay:
                 self.text_overlay = self.text_overlay_cls()
+            try:
+                self.text_overlay.apply_style(
+                    font_family=font_family,
+                    font_size=font_size,
+                    font_color=font_color,
+                    body_color=body_color,
+                    body_alpha=int(round(255 * (body_opacity / 100.0))),
+                    padding=padding,
+                    border=border,
+                )
+            except Exception:
+                pass
             self.text_overlay.set_text(message)
             app = QtWidgets.QApplication.instance()
             screen = app.primaryScreen() if app else None
@@ -836,14 +898,18 @@ def _run_debug_window(
                 geo = screen.availableGeometry()
                 self.text_overlay.adjustSize()
                 ow = self.text_overlay.width()
-                x = geo.x() + max(0, (geo.width() - ow) // 2)
-                y = geo.y() + 24
+                if align in ("topcenter", "top-center", "top_center"):
+                    x = geo.x() + max(0, (geo.width() - ow) // 2)
+                    y = geo.y() + 24
+                else:
+                    x = geo.x() + max(0, (geo.width() - ow) // 2)
+                    y = geo.y() + 24
                 self.text_overlay.move(x, y)
             self.text_overlay.show()
             self.text_overlay.raise_()
             self.text_overlay.repaint()
             self._text_overlay_timer.stop()
-            self._text_overlay_timer.start(max(1, int(duration_s * 1000)))
+            self._text_overlay_timer.start(max(1, int(duration_cfg * 1000)))
 
         def _show_app_config_dialog(self):
             dialog = QtWidgets.QDialog(self)
