@@ -77,6 +77,7 @@ Outputs
 - `notification`: use the Debug window sidebar button to edit notify overlay settings (includes a test button and font picker).
 - `reloadconfig`: reload config.toml (threads keep old config).
 - Mode editor test output is automatically stopped when the dialog closes.
+- Mode editor test output applies `gaming_preset` on start and `idle_preset` on stop/close.
 
 ## Tray IPC (Windows)
 - IPC uses a Windows named pipe: `\\.\pipe\runlights_ipc` (requires `pywin32`).

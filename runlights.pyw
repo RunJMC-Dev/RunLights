@@ -1364,10 +1364,16 @@ def _run_debug_window(
 
                 def _toggle_test():
                     if test_toggle.isChecked():
+                        _apply_gaming_preset(
+                            cfg_raw_global or {},
+                            (cfg_raw_global or {}).get("gaming_preset", "Gaming"),
+                            self.append_line,
+                        )
                         test_timer.start()
                         _apply_test_output()
                     else:
                         test_timer.stop()
+                        _apply_idle_preset(cfg_raw_global or {}, self.append_line)
 
                 test_toggle.stateChanged.connect(lambda _=None: _toggle_test())
                 test_slider.valueChanged.connect(lambda _=None: _apply_test_output())
@@ -1380,6 +1386,10 @@ def _run_debug_window(
                         pass
                     try:
                         test_toggle.setChecked(False)
+                    except Exception:
+                        pass
+                    try:
+                        _apply_idle_preset(cfg_raw_global or {}, self.append_line)
                     except Exception:
                         pass
 
