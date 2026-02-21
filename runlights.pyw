@@ -1373,6 +1373,18 @@ def _run_debug_window(
                 test_slider.valueChanged.connect(lambda _=None: _apply_test_output())
                 test_timer.timeout.connect(_apply_test_output)
 
+                def _cleanup_test():
+                    try:
+                        test_timer.stop()
+                    except Exception:
+                        pass
+                    try:
+                        test_toggle.setChecked(False)
+                    except Exception:
+                        pass
+
+                dlg.finished.connect(lambda _=None: _cleanup_test())
+
                 def _update_bri_labels():
                     a_bri_label.setText(str(out_abri.value()))
                     b_bri_label.setText(str(out_bbri.value()))
