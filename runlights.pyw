@@ -2712,7 +2712,10 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
                         transition_ms=transition,
                         timeout=_wled_timeout(cfg_raw),
                     )
-                log_message(f"Applied {output_type} {value} -> {pct:.0f}% on {controller_id}")
+                color_hex = f"{mix_rgb[0]:02X}{mix_rgb[1]:02X}{mix_rgb[2]:02X}"
+                log_message(
+                    f"Output: WLED: Color {color_hex} Brightness: {mix_bri} on {controller_id}"
+                )
             except Exception as exc:
                 log_message(f"WLED error: {exc}")
     elif output_type == "fade":
@@ -2795,7 +2798,10 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
                         transition_ms=transition,
                         timeout=_wled_timeout(cfg_raw),
                     )
-                log_message(f"Applied {output_type} {value} -> {pct:.0f}% on {controller_id}")
+                color_hex = f"{color_rgb[0]:02X}{color_rgb[1]:02X}{color_rgb[2]:02X}"
+                log_message(
+                    f"Output: WLED: Color {color_hex} Brightness: {mix_bri} on {controller_id}"
+                )
             except Exception as exc:
                 log_message(f"WLED error: {exc}")
     elif output_type == "segmentsolid":
