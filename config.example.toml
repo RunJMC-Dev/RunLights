@@ -18,6 +18,14 @@ bodyopacity = 50
 border = 0
 align = "topcenter"
 
+[mqtt]
+host = "192.168.20.80"
+port = 1883
+username = "mqtt"
+password = "pi3.14159"
+tls = false
+topic = "runlights/notify"
+
 [[controllers]]
 # Use an ID for references (no spaces). "name" is display-only.
 id = "shelf"

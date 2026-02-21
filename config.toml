@@ -9,19 +9,27 @@ default_transition_ms = 150   # Crossfade time for REST updates to smooth change
 debug = true
 gaming_preset = "Gaming"      # Default preset to use when a game starts (per-controller override below).
 
+
+
 [notification]
-duration = 10
-font = "alegraya sans sc"
-fontsize = "24"
+duration = 2
+font = "Alegreya Sans SC"
+fontsize = 33
 fontcolour = "#FFFFFF"
-padding = 6
+padding = 15
 bodycolour = "#000000"
-bodyopacity = 50
+bodyopacity = 10
 border = 0
 align = "topcenter"
 
+[mqtt]
+host = "192.168.20.80"
+port = 1883
+username = "mqtt"
+password = "pi3.14159"
+tls = false
+topic = "runlights/notify"
 
-# Define your WLED controllers here.
 [[controllers]]
 id = "PCROOMLHS"
 friendlyname = "PC Room Left Shelf"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 import sys
 import threading
@@ -2058,6 +2059,254 @@ def _screen_scale(app=None):
         return 1.0
 
 
+class _NotifyOverlayState:
+    def __init__(self, app, overlay, timer):
+        self.app = app
+        self.overlay = overlay
+        self.timer = timer
+
+
+def _read_notification_config(cfg_raw: dict | None, default_duration: int = 10) -> dict:
+    def _int_val(value, default):
+        try:
+            return int(float(value))
+        except Exception:
+            return default
+
+    cfg = {}
+    if cfg_raw:
+        cfg = cfg_raw.get("notification", {}) or {}
+
+    duration_cfg = _int_val(cfg.get("duration", default_duration), default_duration)
+    font_family = str(cfg.get("font", "")).strip() or None
+    font_size = _int_val(cfg.get("fontsize", 24), 24)
+    font_color = str(cfg.get("fontcolour", "#FFFFFF")).strip() or "#FFFFFF"
+    padding = _int_val(cfg.get("padding", 6), 6)
+    body_color_hex = str(cfg.get("bodycolour", "#000000")).strip() or "#000000"
+    body_opacity = _int_val(cfg.get("bodyopacity", 50), 50)
+    body_opacity = max(0, min(100, body_opacity))
+    border = _int_val(cfg.get("border", 0), 0)
+    align = str(cfg.get("align", "topcenter")).strip().lower()
+
+    try:
+        body_color = wled._hex_to_rgb(body_color_hex)
+    except Exception:
+        body_color = (0, 0, 0)
+
+    return {
+        "duration": duration_cfg,
+        "font_family": font_family,
+        "font_size": font_size,
+        "font_color": font_color,
+        "padding": padding,
+        "body_color": body_color,
+        "body_alpha": int(round(255 * (body_opacity / 100.0))),
+        "border": border,
+        "align": align,
+    }
+
+
+def _ensure_notify_ui() -> _NotifyOverlayState | None:
+    try:
+        from PySide6 import QtCore, QtGui, QtWidgets
+    except Exception:
+        return None
+
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        app = QtWidgets.QApplication([])
+
+    class TextOverlay(QtWidgets.QWidget):
+        def __init__(self):
+            super().__init__()
+            self.setWindowFlags(
+                QtCore.Qt.FramelessWindowHint
+                | QtCore.Qt.WindowStaysOnTopHint
+                | QtCore.Qt.Window
+                | QtCore.Qt.ToolTip
+            )
+            self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+            self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+            self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
+            self.setFocusPolicy(QtCore.Qt.NoFocus)
+
+            layout = QtWidgets.QHBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            self.label = QtWidgets.QLabel(self)
+            self._base_font = self.label.font()
+            self._base_font.setBold(True)
+            self.label.setFont(self._base_font)
+            layout.addWidget(self.label)
+
+        def set_text(self, text: str):
+            self.label.setText(text)
+            self.label.adjustSize()
+            self.adjustSize()
+
+        def apply_style(
+            self,
+            *,
+            font_family: str | None,
+            font_size: int,
+            font_color: str,
+            body_color: tuple[int, int, int],
+            body_alpha: int,
+            padding: int,
+            border: int,
+        ):
+            font = QtGui.QFont(self._base_font)
+            if font_family:
+                font.setFamily(font_family)
+            font.setPointSize(max(8, int(font_size)))
+            self.label.setFont(font)
+            border_css = "none" if border <= 0 else f"{border}px solid rgba(200,200,200,160)"
+            self.label.setStyleSheet(
+                "color: {font_color}; background: rgba({r},{g},{b},{a});"
+                "border: {border}; padding: {padding}px; border-radius: 6px;".format(
+                    font_color=font_color,
+                    r=body_color[0],
+                    g=body_color[1],
+                    b=body_color[2],
+                    a=body_alpha,
+                    border=border_css,
+                    padding=max(0, int(padding)),
+                )
+            )
+
+    overlay = TextOverlay()
+    timer = QtCore.QTimer()
+    timer.setSingleShot(True)
+    timer.timeout.connect(overlay.hide)
+    return _NotifyOverlayState(app, overlay, timer)
+
+
+def _show_notification_overlay(message: str, cfg_raw: dict | None, state: _NotifyOverlayState):
+    settings = _read_notification_config(cfg_raw)
+    state.overlay.apply_style(
+        font_family=settings["font_family"],
+        font_size=settings["font_size"],
+        font_color=settings["font_color"],
+        body_color=settings["body_color"],
+        body_alpha=settings["body_alpha"],
+        padding=settings["padding"],
+        border=settings["border"],
+    )
+    state.overlay.set_text(message)
+    app = state.app
+    screen = app.primaryScreen() if app else None
+    if screen is None and app:
+        screens = app.screens()
+        if screens:
+            screen = screens[0]
+    if screen:
+        geo = screen.availableGeometry()
+        state.overlay.adjustSize()
+        ow = state.overlay.width()
+        align = settings["align"]
+        if align in ("topcenter", "top-center", "top_center"):
+            x = geo.x() + max(0, (geo.width() - ow) // 2)
+            y = geo.y() + 24
+        elif align in ("top_end", "topend", "top-right", "topright"):
+            x = geo.x() + max(0, geo.width() - ow - 24)
+            y = geo.y() + 24
+        elif align in ("top_start", "topstart", "top-left", "topleft"):
+            x = geo.x() + 24
+            y = geo.y() + 24
+        else:
+            x = geo.x() + max(0, (geo.width() - ow) // 2)
+            y = geo.y() + 24
+        state.overlay.move(x, y)
+    state.overlay.show()
+    state.overlay.raise_()
+    state.overlay.repaint()
+    state.timer.stop()
+    state.timer.start(max(1, int(settings["duration"] * 1000)))
+
+
+def _start_mqtt_listener(
+    cfg_raw: dict,
+    stop_event: threading.Event,
+    notify_queue: "queue.Queue[str]",
+    log_message,
+):
+    mqtt_cfg = cfg_raw.get("mqtt", {}) if cfg_raw else {}
+    if not mqtt_cfg:
+        log_message("MQTT disabled (no [mqtt] config)")
+        return None
+
+    host = str(mqtt_cfg.get("host", "")).strip()
+    try:
+        port = int(mqtt_cfg.get("port", 1883))
+    except Exception:
+        port = 1883
+    username = str(mqtt_cfg.get("username", "")).strip()
+    password = str(mqtt_cfg.get("password", "")).strip()
+    tls = bool(mqtt_cfg.get("tls", False))
+    topic = str(mqtt_cfg.get("topic", "")).strip()
+
+    if not host or not topic:
+        log_message("MQTT disabled (host/topic missing)")
+        return None
+
+    try:
+        import paho.mqtt.client as mqtt  # type: ignore
+    except Exception as exc:
+        log_message(f"MQTT disabled (paho-mqtt not installed): {exc}")
+        return None
+
+    client = mqtt.Client()
+    if username:
+        client.username_pw_set(username, password)
+    if tls:
+        try:
+            client.tls_set()
+        except Exception as exc:
+            log_message(f"MQTT TLS setup failed: {exc}")
+
+    def on_connect(_client, _userdata, _flags, rc):
+        if rc == 0:
+            log_message(f"MQTT connected to {host}:{port}")
+            try:
+                _client.subscribe(topic)
+            except Exception as exc:
+                log_message(f"MQTT subscribe failed: {exc}")
+        else:
+            log_message(f"MQTT connect error: {rc}")
+
+    def on_message(_client, _userdata, msg):
+        try:
+            payload = msg.payload.decode("utf-8", errors="replace")
+            data = json.loads(payload)
+            if isinstance(data, dict) and "message" in data:
+                message = str(data.get("message") or "").strip()
+                if message:
+                    notify_queue.put(message)
+        except Exception as exc:
+            log_message(f"MQTT message ignored: {exc}")
+
+    client.on_connect = on_connect
+    client.on_message = on_message
+
+    def worker():
+        try:
+            client.connect(host, port, keepalive=60)
+        except Exception as exc:
+            log_message(f"MQTT connect failed: {exc}")
+            return
+        try:
+            while not stop_event.is_set():
+                client.loop(timeout=1.0)
+        except Exception as exc:
+            log_message(f"MQTT loop stopped: {exc}")
+        try:
+            client.disconnect()
+        except Exception:
+            pass
+
+    threading.Thread(target=worker, daemon=True).start()
+    return client
+
+
 def _reload_config(log_message):
     """Reload config from disk and update global reference."""
     global cfg_raw_global
@@ -3196,6 +3445,7 @@ def main() -> int:
     log_queue: "queue.Queue[str]" = queue.Queue()
     log_buffer: list[str] = []
     ocr_fail_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
+    notify_queue: "queue.Queue[str]" = queue.Queue()
     cfg_raw: dict | None = None
     # expose cfg to debug window commands
     global cfg_raw_global
@@ -3263,6 +3513,9 @@ def main() -> int:
 
     tray_icon = start_tray_icon(stop_event, debug_request)
     debug_ui: _DebugWindowState | None = None
+    notify_ui: _NotifyOverlayState | None = None
+    if cfg is not None:
+        _start_mqtt_listener(cfg.raw, stop_event, notify_queue, log_message)
 
     # Start process watcher if we have processes configured.
     if cfg is not None:
@@ -3297,6 +3550,28 @@ def main() -> int:
                         debug_ui.app.processEvents()
                 except Exception:
                     debug_ui = None
+            try:
+                while True:
+                    msg = notify_queue.get_nowait()
+                    if debug_ui and debug_ui.window:
+                        try:
+                            debug_ui.window._show_text_overlay(msg)
+                        except Exception:
+                            pass
+                    else:
+                        if notify_ui is None:
+                            notify_ui = _ensure_notify_ui()
+                            if notify_ui is None:
+                                log_message("Notification overlay unavailable (PySide6 missing)")
+                                continue
+                        _show_notification_overlay(msg, cfg_raw, notify_ui)
+            except queue.Empty:
+                pass
+            if notify_ui and (not debug_ui):
+                try:
+                    notify_ui.app.processEvents()
+                except Exception:
+                    pass
             time.sleep(0.1)
     except KeyboardInterrupt:
         stop_event.set()

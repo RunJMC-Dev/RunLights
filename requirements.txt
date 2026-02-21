@@ -1,5 +1,8 @@
 pywin32
 pystray
 Pillow
+PySide6
+pytesseract
 psutil
 requests
+paho-mqtt
