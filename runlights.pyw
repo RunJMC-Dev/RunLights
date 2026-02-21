@@ -345,6 +345,45 @@ def _run_debug_window(
                     painter.end()
 
             self.overlay_rect_cls = OverlayRect
+            self.text_overlay = None
+            self._text_overlay_timer = QtCore.QTimer(self)
+            self._text_overlay_timer.setSingleShot(True)
+            self._text_overlay_timer.timeout.connect(self._hide_text_overlay)
+
+            class TextOverlay(QtWidgets.QWidget):
+                def __init__(self):
+                    super().__init__()
+                    self.setWindowFlags(
+                        QtCore.Qt.FramelessWindowHint
+                        | QtCore.Qt.WindowStaysOnTopHint
+                        | QtCore.Qt.Window
+                        | QtCore.Qt.ToolTip
+                    )
+                    self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+                    self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+                    self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
+                    self.setFocusPolicy(QtCore.Qt.NoFocus)
+
+                    layout = QtWidgets.QHBoxLayout(self)
+                    layout.setContentsMargins(0, 0, 0, 0)
+                    self.label = QtWidgets.QLabel(self)
+                    font = self.label.font()
+                    font.setPointSize(14)
+                    font.setBold(True)
+                    self.label.setFont(font)
+                    self.label.setStyleSheet(
+                        "color: #f5f5f5; background: rgba(24,24,24,220);"
+                        "border: 1px solid rgba(200,200,200,160);"
+                        "padding: 8px 14px; border-radius: 6px;"
+                    )
+                    layout.addWidget(self.label)
+
+                def set_text(self, text: str):
+                    self.label.setText(text)
+                    self.label.adjustSize()
+                    self.adjustSize()
+
+            self.text_overlay_cls = TextOverlay
 
             input_row = QtWidgets.QHBoxLayout()
             class HistoryLineEdit(QtWidgets.QLineEdit):
@@ -441,6 +480,7 @@ def _run_debug_window(
                 "showcontrollers",
                 "ocrtest",
                 "ocroverlay ",
+                "textoverlay ",
                 "testoutput idle",
                 "testoutput ",
                 "loadpreset ",
@@ -471,6 +511,11 @@ def _run_debug_window(
             try:
                 if self.overlay:
                     self.overlay.hide()
+            except Exception:
+                pass
+            try:
+                if self.text_overlay:
+                    self.text_overlay.hide()
             except Exception:
                 pass
             return super().closeEvent(event)
@@ -514,6 +559,7 @@ def _run_debug_window(
                     "  loadpreset <controller> <preset> - apply a WLED preset by id or name",
                     "  getpreset <controller>     - show the current preset on a controller",
                     "  ocroverlay <app>.<mode>    - toggle green overlay on a screen_region",
+                    "  textoverlay <message>      - show a top-center overlay for 10s",
                     "  tasksearch <term>          - list running tasks that contain term",
                     "  appconfig                  - open dialog to add/configure an application",
                     "  reloadconfig               - reload config.toml (threads keep old config)",
@@ -733,6 +779,13 @@ def _run_debug_window(
                         pass
                     self._overlay_target = target
                     self.append_line(f"OCR overlay shown for {target} at {region}")
+            elif cmd.startswith("textoverlay"):
+                message = raw_cmd[len("textoverlay"):].strip()
+                if not message:
+                    self.append_line("Usage: textoverlay <message>")
+                    return
+                self._show_text_overlay(message, duration_s=10)
+                self.append_line("Text overlay shown for 10s")
             elif cmd.startswith("tasksearch"):
                 if psutil is None:
                     self.append_line("Task search unavailable (psutil not installed)")
@@ -764,6 +817,33 @@ def _run_debug_window(
                     self._build_completer()
             else:
                 self.append_line(f"Unknown command: {cmd}")
+
+        def _hide_text_overlay(self):
+            if self.text_overlay:
+                self.text_overlay.hide()
+
+        def _show_text_overlay(self, message: str, duration_s: int = 10):
+            if not self.text_overlay:
+                self.text_overlay = self.text_overlay_cls()
+            self.text_overlay.set_text(message)
+            app = QtWidgets.QApplication.instance()
+            screen = app.primaryScreen() if app else None
+            if screen is None and app:
+                screens = app.screens()
+                if screens:
+                    screen = screens[0]
+            if screen:
+                geo = screen.availableGeometry()
+                self.text_overlay.adjustSize()
+                ow = self.text_overlay.width()
+                x = geo.x() + max(0, (geo.width() - ow) // 2)
+                y = geo.y() + 24
+                self.text_overlay.move(x, y)
+            self.text_overlay.show()
+            self.text_overlay.raise_()
+            self.text_overlay.repaint()
+            self._text_overlay_timer.stop()
+            self._text_overlay_timer.start(max(1, int(duration_s * 1000)))
 
         def _show_app_config_dialog(self):
             dialog = QtWidgets.QDialog(self)
