@@ -35,6 +35,7 @@ id = "PCROOMLHS"
 friendlyname = "PC Room Left Shelf"
 host = "192.168.20.118"
 gaming_preset = "Gaming"
+idle_preset = "Default"
 
   [[controllers.segments]]
   id = 0
@@ -71,6 +72,7 @@ id = "PCROOMRHS"
 friendlyname = "PC Room Right Shelf"
 host = "192.168.20.245"
 gaming_preset = "Gaming"
+idle_preset = "Default"
 
   [[controllers.segments]]
   id = 0
@@ -107,6 +109,7 @@ id = "PCROOMMIDDLE"
 friendlyname = "PC Room Middle"
 host = "192.168.20.182"
 gaming_preset = "Gaming"
+idle_preset = "Default"
 
   [[controllers.segments]]
   id = 0

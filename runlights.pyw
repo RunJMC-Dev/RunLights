@@ -3009,53 +3009,44 @@ def _log_current_preset(controller_id: str, cfg_raw: dict, log_message):
         log_message(f"{cid}: preset {pid}")
 
 
-def _apply_global_gaming_preset(cfg_raw: dict, preset_name: str, log_message) -> dict[str, int | None]:
-    """
-    Snapshot current presets for all controllers and apply a gaming preset.
-    Returns a map of controller id -> previous preset id (or None).
-    """
-    stored: dict[str, int | None] = {}
+def _apply_gaming_preset(cfg_raw: dict, preset_name: str, log_message):
     transition_ms = cfg_raw.get("default_transition_ms")
     for ctrl_entry in cfg_raw.get("controllers", []):
         cid = ctrl_entry.get("id")
         chost = ctrl_entry.get("host")
         cport = int(ctrl_entry.get("port", 80))
         ctrl = wled.WLEDController(host=chost, port=cport)
-        prev_pid = None
         ctrl_preset = ctrl_entry.get("gaming_preset", preset_name)
-        try:
-            prev_pid = wled.current_preset_id(ctrl, timeout=_wled_timeout(cfg_raw))
-        except Exception as exc:
-            log_message(f"Preset snapshot error on {cid}: {exc}")
-        stored[cid] = prev_pid
         try:
             wled.apply_preset(controller=ctrl, preset=ctrl_preset, transition_ms=transition_ms, timeout=_wled_timeout(cfg_raw))
         except Exception as exc:
             log_message(f"WLED gaming preset error on {cid}: {exc}")
-    log_message(f"Applied gaming preset '{preset_name}' to {len(stored)} controller(s)")
-    return stored
+    log_message(f"Applied gaming preset '{preset_name}' to controllers")
 
 
-def _restore_presets(cfg_raw: dict, stored_presets: dict[str, int | None], log_message):
-    """Restore presets previously captured by _apply_global_gaming_preset."""
-    if not stored_presets:
-        return
+def _apply_idle_preset(cfg_raw: dict, log_message):
     transition_ms = cfg_raw.get("default_transition_ms")
+    applied = 0
     for ctrl_entry in cfg_raw.get("controllers", []):
         cid = ctrl_entry.get("id")
-        prev_pid = stored_presets.get(cid)
-        if prev_pid is None:
+        idle_preset = ctrl_entry.get("idle_preset")
+        if idle_preset is None or str(idle_preset).strip() == "":
             continue
         chost = ctrl_entry.get("host")
         cport = int(ctrl_entry.get("port", 80))
         ctrl = wled.WLEDController(host=chost, port=cport)
-        log_message(f"Restoring preset {prev_pid} on {cid}")
         try:
-            wled.apply_preset(controller=ctrl, preset=prev_pid, transition_ms=transition_ms, timeout=_wled_timeout(cfg_raw))
+            wled.apply_preset(
+                controller=ctrl,
+                preset=idle_preset,
+                transition_ms=transition_ms,
+                timeout=_wled_timeout(cfg_raw),
+            )
+            applied += 1
         except Exception as exc:
-            log_message(f"WLED restore error on {cid}: {exc}")
-    stored_presets.clear()
-    log_message("Restored previous presets")
+            log_message(f"WLED idle preset error on {cid}: {exc}")
+    if applied:
+        log_message("Applied idle presets")
 
 
 def _apply_idle(cfg_raw: dict, log_message):
@@ -3112,7 +3103,6 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
     seen: set[str] = set()
     active_app: str | None = None
     last_foreground_app: str | None = None
-    stored_presets: dict[str, int | None] = {}
     gaming_preset = cfg_raw.get("gaming_preset", "Gaming")
     try:
         import win32gui  # type: ignore
@@ -3143,8 +3133,7 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                 if started_apps:
                     active_app = sorted(started_apps)[0]
                     CURRENT_APP_ID = active_app
-                    if not stored_presets:
-                        stored_presets = _apply_global_gaming_preset(cfg_raw, gaming_preset, log_message)
+                    _apply_gaming_preset(cfg_raw, gaming_preset, log_message)
                     # Apply base output for first mode
                     modes = next((a.get("modes", []) for a in cfg_raw.get("application", []) if a.get("id") == active_app), [])
                     if modes:
@@ -3155,9 +3144,7 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                     if active_app in stopped_apps or not current:
                         active_app = None
                         CURRENT_APP_ID = None
-                        _restore_presets(cfg_raw, stored_presets, log_message)
-                        if cfg_raw.get("idle"):
-                            _apply_idle(cfg_raw, log_message)
+                        _apply_idle_preset(cfg_raw, log_message)
                 # Log when the active app becomes the foreground window.
                 if active_app and win32gui and win32process:
                     try:
