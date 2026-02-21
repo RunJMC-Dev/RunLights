@@ -23,7 +23,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - Copy `config.example.toml` to `config.toml` in the app folder (keep it beside the app so it moves with it) and edit.
 - Uses WLED REST with transitions; default update interval is `500ms` and can be tweaked per config.
 - Controllers use an `id` for references (no spaces) plus an optional human-friendly `name`; define static IPs and segments.
-- Controllers can define `gaming_preset` (applied on game start) and `idle_preset` (applied on game exit).
+- Controllers can define `gaming_preset` (applied on game start) and `idle_preset` (applied on launch and game exit).
 - Modes are keyed off process names; can include screen-region inputs, range mapping, and outputs such as `crossfade` (whole strip brightness from range) and `segmentsolid` (target segment vs others with A/B colors/brightness).
 - `idle` block defines color/brightness/transition when idle or when watched apps close.
 - ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` for `segmentsolid`.

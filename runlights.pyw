@@ -3473,8 +3473,10 @@ def main() -> int:
             pass
         cfg = None
 
-    if cfg_raw is not None and cfg_raw.get("idle"):
-        _apply_idle(cfg_raw, log_message)
+    if cfg_raw is not None:
+        _apply_idle_preset(cfg_raw, log_message)
+        if cfg_raw.get("idle"):
+            _apply_idle(cfg_raw, log_message)
 
     # Single instance guard: if pipe already exists, exit.
     try:
