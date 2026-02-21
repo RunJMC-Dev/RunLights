@@ -2880,6 +2880,15 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
         except Exception:
             log_message("segmentpercent expects a numeric value")
             return
+        danger_type = str(mode.get("dangertype", "")).strip().lower()
+        try:
+            danger_threshold = float(mode.get("dangerthreshold", -1))
+        except Exception:
+            danger_threshold = -1
+        danger_active = danger_threshold >= 0 and val_f <= danger_threshold
+        flash_on = True
+        if danger_active and danger_type == "flash":
+            flash_on = int(time.monotonic() * 2) % 2 == 0
         try:
             minv = float(mode.get("minvalue", 0))
             maxv = float(mode.get("maxvalue", 100))
@@ -2913,8 +2922,12 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
             for idx, seg in enumerate(segments):
                 seg_id = seg.get("id")
                 is_filled = idx < filled
-                seg_color = acolor if is_filled else bcolor
-                seg_bri = abri if is_filled else bbri
+                if danger_active and danger_type == "flash" and is_filled and not flash_on:
+                    seg_color = bcolor
+                    seg_bri = bbri
+                else:
+                    seg_color = acolor if is_filled else bcolor
+                    seg_bri = abri if is_filled else bbri
                 seg_updates.append(
                     wled.WLEDPayload(
                         on=seg_bri > 0,
