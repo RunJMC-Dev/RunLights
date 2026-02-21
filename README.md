@@ -71,6 +71,7 @@ Outputs
 - `notify <message>`: show a top-center text overlay for 10s.
 - `tasksearch <term>`: list running tasks that contain term.
 - `appconfig`: opens a dialog to add/configure an `[[application]]` entry (includes a process picker and optional input/output mode settings).
+- `notification`: use the Debug window sidebar button to edit notify overlay settings (includes a test button).
 - `reloadconfig`: reload config.toml (threads keep old config).
 
 ## Tray IPC (Windows)

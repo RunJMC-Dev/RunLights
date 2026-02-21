@@ -261,6 +261,9 @@ def _run_debug_window(
             appconfig_btn = QtWidgets.QPushButton("App Config")
             appconfig_btn.clicked.connect(lambda _=None: self._show_app_config_dialog())
             sidebar_layout.addWidget(appconfig_btn)
+            notif_btn = QtWidgets.QPushButton("Notification")
+            notif_btn.clicked.connect(lambda _=None: self._show_notification_config_dialog())
+            sidebar_layout.addWidget(notif_btn)
             restart_btn = QtWidgets.QPushButton("Restart")
             restart_btn.clicked.connect(lambda _=None: _restart_runlights_from_debug(self))
             sidebar_layout.addWidget(restart_btn)
@@ -856,6 +859,8 @@ def _run_debug_window(
             cfg = {}
             if cfg_raw_global:
                 cfg = cfg_raw_global.get("notification", {}) or {}
+            if getattr(self, "_notify_override", None):
+                cfg = {**cfg, **self._notify_override}
 
             duration_cfg = _int_val(cfg.get("duration", duration_s), duration_s)
             font_family = str(cfg.get("font", "")).strip() or None
@@ -1761,6 +1766,110 @@ def _run_debug_window(
             finally:
                 PAUSE_EVENT.clear()
 
+        def _show_notification_config_dialog(self):
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Notification Config")
+            dialog.setModal(True)
+            dialog.setMinimumWidth(520)
+            dialog.resize(520, 360)
+
+            form = QtWidgets.QFormLayout(dialog)
+            form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+            current = {}
+            if cfg_raw_global:
+                current = cfg_raw_global.get("notification", {}) or {}
+
+            def _int_val(value, default):
+                try:
+                    return int(float(value))
+                except Exception:
+                    return default
+
+            duration = QtWidgets.QSpinBox()
+            duration.setRange(1, 120)
+            duration.setValue(_int_val(current.get("duration", 10), 10))
+
+            font = QtWidgets.QLineEdit(str(current.get("font", "")).strip())
+            fontsize = QtWidgets.QSpinBox()
+            fontsize.setRange(8, 96)
+            fontsize.setValue(_int_val(current.get("fontsize", 24), 24))
+
+            fontcolour = QtWidgets.QLineEdit(str(current.get("fontcolour", "#FFFFFF")).strip() or "#FFFFFF")
+            padding = QtWidgets.QSpinBox()
+            padding.setRange(0, 40)
+            padding.setValue(_int_val(current.get("padding", 6), 6))
+
+            bodycolour = QtWidgets.QLineEdit(str(current.get("bodycolour", "#000000")).strip() or "#000000")
+            bodyopacity = QtWidgets.QSpinBox()
+            bodyopacity.setRange(0, 100)
+            bodyopacity.setValue(_int_val(current.get("bodyopacity", 50), 50))
+
+            border = QtWidgets.QSpinBox()
+            border.setRange(0, 10)
+            border.setValue(_int_val(current.get("border", 0), 0))
+
+            align = QtWidgets.QComboBox()
+            align.addItems(["topcenter"])
+            align_val = str(current.get("align", "topcenter")).strip().lower() or "topcenter"
+            idx = align.findText(align_val, QtCore.Qt.MatchFixedString)
+            align.setCurrentIndex(idx if idx >= 0 else 0)
+
+            test_message = QtWidgets.QLineEdit("Notification test")
+
+            form.addRow("Duration (s)", duration)
+            form.addRow("Font", font)
+            form.addRow("Font size", fontsize)
+            form.addRow("Font colour", fontcolour)
+            form.addRow("Padding", padding)
+            form.addRow("Body colour", bodycolour)
+            form.addRow("Body opacity", bodyopacity)
+            form.addRow("Border", border)
+            form.addRow("Align", align)
+            form.addRow("Test message", test_message)
+
+            btn_row = QtWidgets.QHBoxLayout()
+            test_btn = QtWidgets.QPushButton("Test")
+            save_btn = QtWidgets.QPushButton("Save")
+            cancel_btn = QtWidgets.QPushButton("Cancel")
+            btn_row.addWidget(test_btn)
+            btn_row.addStretch(1)
+            btn_row.addWidget(save_btn)
+            btn_row.addWidget(cancel_btn)
+            form.addRow(btn_row)
+
+            def _collect_settings():
+                return {
+                    "duration": duration.value(),
+                    "font": font.text().strip(),
+                    "fontsize": fontsize.value(),
+                    "fontcolour": fontcolour.text().strip() or "#FFFFFF",
+                    "padding": padding.value(),
+                    "bodycolour": bodycolour.text().strip() or "#000000",
+                    "bodyopacity": bodyopacity.value(),
+                    "border": border.value(),
+                    "align": align.currentText().strip() or "topcenter",
+                }
+
+            def _on_test():
+                self._notify_override = _collect_settings()
+                self._show_text_overlay(test_message.text().strip() or "Notification test", duration_s=10)
+                self._notify_override = None
+
+            def _on_save():
+                settings = _collect_settings()
+                ok = _upsert_notification_in_config(CONFIG_PATH, settings, self.append_line)
+                if ok:
+                    self.append_line("Saved notification settings to config.toml")
+                    _reload_config(self.append_line)
+                dialog.accept()
+
+            test_btn.clicked.connect(lambda _=None: _on_test())
+            save_btn.clicked.connect(lambda _=None: _on_save())
+            cancel_btn.clicked.connect(lambda _=None: dialog.reject())
+
+            dialog.exec()
+
         def append_line(self, line: str, preformatted: bool = False):
             if preformatted:
                 text = line
@@ -2020,6 +2129,76 @@ def _restart_runlights():
 
 def _toml_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+
+def _render_notification_block(settings: dict) -> list[str]:
+    def _int_val(value, default):
+        try:
+            return int(float(value))
+        except Exception:
+            return default
+
+    lines = ["", "[notification]"]
+    lines.append(f"duration = {_int_val(settings.get('duration', 10), 10)}")
+    lines.append(f"font = \"{_toml_escape(str(settings.get('font', '')).strip())}\"")
+    lines.append(f"fontsize = {_int_val(settings.get('fontsize', 24), 24)}")
+    lines.append(f"fontcolour = \"{_toml_escape(str(settings.get('fontcolour', '#FFFFFF')).strip() or '#FFFFFF')}\"")
+    lines.append(f"padding = {_int_val(settings.get('padding', 6), 6)}")
+    lines.append(f"bodycolour = \"{_toml_escape(str(settings.get('bodycolour', '#000000')).strip() or '#000000')}\"")
+    lines.append(f"bodyopacity = {_int_val(settings.get('bodyopacity', 50), 50)}")
+    lines.append(f"border = {_int_val(settings.get('border', 0), 0)}")
+    lines.append(f"align = \"{_toml_escape(str(settings.get('align', 'topcenter')).strip() or 'topcenter')}\"")
+    lines.append("")
+    return lines
+
+
+def _find_table_block(lines: list[str], table_name: str) -> tuple[int, int] | None:
+    start = None
+    target = f"[{table_name}]"
+    for idx, line in enumerate(lines):
+        if line.strip() == target:
+            start = idx
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        stripped = lines[j].strip()
+        if stripped.startswith("[") and lines[j].lstrip() == lines[j]:
+            end = j
+            break
+    return start, end
+
+
+def _upsert_notification_in_config(config_path: Path, settings: dict, log_message) -> bool:
+    if not config_path.exists():
+        log_message(f"Config file not found: {config_path}")
+        return False
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+        lines = raw.splitlines()
+        found = _find_table_block(lines, "notification")
+        if found:
+            start, end = found
+            del lines[start:end]
+        insert_idx = len(lines)
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("[") and line.lstrip() == line:
+                insert_idx = idx
+                break
+        block_lines = _render_notification_block(settings)
+        if insert_idx == 0 and block_lines and block_lines[0] == "":
+            block_lines = block_lines[1:]
+        lines[insert_idx:insert_idx] = block_lines
+        out = "\n".join(lines)
+        if raw.endswith("\n"):
+            out += "\n"
+        config_path.write_text(out, encoding="utf-8")
+        return True
+    except Exception as exc:
+        log_message(f"Failed to write config: {exc}")
+        return False
 
 
 def _render_application_block(
