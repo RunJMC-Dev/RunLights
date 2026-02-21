@@ -1120,11 +1120,11 @@ def _run_debug_window(
                 test_slider.setValue(50)
                 test_layout.addWidget(test_toggle)
                 test_layout.addWidget(test_slider)
-                form.addRow("Test", test_wrap)
 
                 output_group = QtWidgets.QWidget(dlg)
                 output_form = QtWidgets.QFormLayout(output_group)
                 output_form.setContentsMargins(0, 0, 0, 0)
+                output_form.addRow("Test", test_wrap)
                 controller_ids = []
                 if cfg_raw_global:
                     for ctrl in cfg_raw_global.get("controllers", []):
