@@ -10,6 +10,7 @@ default_transition_ms = 150   # Crossfade time for REST updates to smooth change
 [debug_window]
 output = true
 input = true
+log_to_notifications = false
 
 [notification]
 duration = 10

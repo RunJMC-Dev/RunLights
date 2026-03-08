@@ -340,10 +340,11 @@ def _run_debug_window(
 
             self._log_history: list[tuple[str, bool]] = []
 
-            self._log_to_notifications = False
+            self._log_to_notifications = bool(debug_settings.get("log_to_notifications", False))
             self.log_to_notifications_checkbox = QtWidgets.QCheckBox(
                 "Output log to on screen notifications."
             )
+            self.log_to_notifications_checkbox.setChecked(self._log_to_notifications)
             self.log_to_notifications_checkbox.toggled.connect(self._set_log_to_notifications)
             layout.addWidget(self.log_to_notifications_checkbox)
 
@@ -1976,6 +1977,7 @@ def _run_debug_window(
             settings = {
                 "output": bool(self._show_output_logs),
                 "input": bool(self._show_input_logs),
+                "log_to_notifications": bool(self._log_to_notifications),
             }
             if _upsert_debug_window_in_config(CONFIG_PATH, settings, self.append_line):
                 if cfg_raw_global is not None:
@@ -2035,6 +2037,7 @@ def _run_debug_window(
 
         def _set_log_to_notifications(self, enabled: bool):
             self._log_to_notifications = bool(enabled)
+            self._persist_debug_filters()
 
         def show_preview(self, pil_image):
             try:
@@ -2261,6 +2264,7 @@ def _read_debug_window_config(cfg_raw: dict | None) -> dict:
     return {
         "output": bool(cfg.get("output", True)),
         "input": bool(cfg.get("input", True)),
+        "log_to_notifications": bool(cfg.get("log_to_notifications", False)),
     }
 
 
@@ -2567,6 +2571,7 @@ def _render_debug_window_block(settings: dict) -> list[str]:
     lines = ["", "[debug_window]"]
     lines.append(f"output = {str(bool(settings.get('output', True))).lower()}")
     lines.append(f"input = {str(bool(settings.get('input', True))).lower()}")
+    lines.append(f"log_to_notifications = {str(bool(settings.get('log_to_notifications', False))).lower()}")
     lines.append("")
     return lines
 
