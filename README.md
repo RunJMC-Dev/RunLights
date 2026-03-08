@@ -112,6 +112,7 @@ Outputs
 - `reloadconfig`: reload config.toml (threads keep old config).
 - Mode editor test output is automatically stopped when the dialog closes.
 - Mode editor test output applies `gaming_preset` on start and `idle_preset` on stop/close.
+- Debug log lines are classified as Output/Input/Other for filters and on-screen notifications.
 - Mode editor exposes danger flash settings (type + threshold) and uses them for test output.
 
 ## Tray IPC (Windows)

@@ -181,25 +181,69 @@ def _apply_dark_palette(app):
     app.setStyleSheet("QLineEdit, QPlainTextEdit { background: #1e1e1e; }")
 
 
-def _prime_log_buffer(log_queue: "queue.Queue[str]", log_buffer: list[str]):
+def _format_log_entry(entry: dict) -> str:
+    ts = entry.get("ts", "")
+    msg = entry.get("msg", "")
+    if ts:
+        return f"[{ts}] {msg}"
+    return msg
+
+
+def _prime_log_buffer(log_queue: "queue.Queue[dict]", log_buffer: list[dict]):
     """Drain any queued messages into the buffer before rendering the UI."""
     try:
-        seen = set(log_buffer)
+        seen = {entry.get("msg") for entry in log_buffer}
         while True:
-            msg = log_queue.get_nowait()
+            entry = log_queue.get_nowait()
+            if not isinstance(entry, dict):
+                entry = {"ts": "", "msg": str(entry), "class": "OTHER", "id": "LOG_MESSAGE"}
+            msg = entry.get("msg")
             if msg not in seen:
-                log_buffer.append(msg)
+                log_buffer.append(entry)
                 seen.add(msg)
     except queue.Empty:
         pass
 
 
 def _log_output(log_message, msg: str):
-    log_message(f"[OUTPUT] {msg}")
+    log_message(msg, msg_class="OUTPUT")
 
 
 def _log_input(log_message, msg: str):
-    log_message(f"[INPUT] {msg}")
+    log_message(msg, msg_class="INPUT")
+
+
+def _normalize_msg_for_id(msg: str) -> str:
+    msg = re.sub(r"[A-Za-z]:\\[^\s]+", "{PATH}", msg)
+    msg = re.sub(r"#?[0-9A-Fa-f]{6}", "{HEX}", msg)
+    msg = re.sub(r"\b\d+\.\d+\b", "{NUM}", msg)
+    msg = re.sub(r"\b\d+\b", "{NUM}", msg)
+    msg = re.sub(r"'[^']*'", "{STR}", msg)
+    msg = re.sub(r"\"[^\"]*\"", "{STR}", msg)
+    msg = re.sub(r"\s+", " " , msg).strip()
+    return msg
+
+
+def _make_msg_id(msg: str, msg_class: str) -> str:
+    base = _normalize_msg_for_id(msg)
+    base = re.sub(r"[^A-Za-z0-9]+", "_", base).strip("_")
+    if not base:
+        base = "MESSAGE"
+    return f"LOG_{msg_class}_{base.upper()}"
+
+
+def _build_log_entry(msg: str, msg_id: str | None = None, msg_class: str | None = None) -> dict:
+    if msg_class is None:
+        _, msg_class = _classify_debug_line(msg)
+    msg_class = msg_class or "OTHER"
+    if msg_id is None:
+        msg_id = _make_msg_id(msg, msg_class)
+    return {
+        "ts": datetime.now().strftime("%H:%M:%S"),
+        "msg": msg,
+        "class": msg_class,
+        "id": msg_id,
+    }
 
 
 def _classify_debug_line(text: str) -> tuple[str, str | None]:
@@ -208,11 +252,6 @@ def _classify_debug_line(text: str) -> tuple[str, str | None]:
     if len(text) >= 11 and text[0] == "[" and text[9] == "]" and text[10] == " ":
         prefix = text[:11]
         body = text[11:]
-    tag_match = re.search(r"\[(OUTPUT|INPUT)\]\s*", body)
-    if tag_match:
-        category = tag_match.group(1)
-        body = body[:tag_match.start()] + body[tag_match.end():]
-        return prefix + body, category
     if body.startswith("OCR "):
         return prefix + body, "INPUT"
     if body.startswith(("Output:", "Applied ", "WLED ") ):
@@ -222,8 +261,8 @@ def _classify_debug_line(text: str) -> tuple[str, str | None]:
 
 def _run_debug_window(
     stop_event: threading.Event,
-    log_queue: "queue.Queue[str]",
-    log_buffer: list[str],
+    log_queue: "queue.Queue[dict]",
+    log_buffer: list[dict],
     ocr_fail_queue: "queue.Queue[tuple[str, str]]",
 ):
     try:
@@ -357,7 +396,7 @@ def _run_debug_window(
             except Exception:
                 pass
 
-            self._log_history: list[tuple[str, bool]] = []
+            self._log_history: list[dict] = []
 
             self._log_to_notifications = bool(debug_settings.get("log_to_notifications", False))
             self.log_to_notifications_checkbox = QtWidgets.QCheckBox(
@@ -536,7 +575,7 @@ def _run_debug_window(
 
             # Replay the full log history when opening the window.
             for entry in log_buffer:
-                self.append_line(entry, preformatted=True)
+                self.append_entry(entry)
             self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
 
             self.input.returnPressed.connect(self._on_send)
@@ -2007,41 +2046,37 @@ def _run_debug_window(
         def _extract_log_category(self, text: str) -> tuple[str, str | None]:
             return _classify_debug_line(text)
 
-        def _render_log_line(
-            self,
-            line: str,
-            preformatted: bool = False,
-            emit_notifications: bool = True,
-        ):
-            if preformatted:
-                text = line
-            else:
-                prefix = f"[{datetime.now().strftime('%H:%M:%S')}] "
-                text = prefix + line
-                if "\n" in text:
-                    indent = " " * len(prefix)
-                    text = text.replace("\n", "\n" + indent)
-            text, category = self._extract_log_category(text)
+        def _render_log_entry(self, entry: dict, emit_notifications: bool = True):
+            if not isinstance(entry, dict):
+                entry = {"ts": "", "msg": str(entry), "class": "OTHER", "id": "LOG_MESSAGE"}
+            category = entry.get("class")
+            if not category:
+                _, category = _classify_debug_line(entry.get("msg", ""))
+            text_line = _format_log_entry(entry)
             if category == "OUTPUT" and not self._show_output_logs:
                 return
             if category == "INPUT" and not self._show_input_logs:
                 return
-            self.log_box.appendPlainText(text)
+            self.log_box.appendPlainText(text_line)
             self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
             self._update_log_padding()
             if emit_notifications and self._log_to_notifications:
-                self._show_text_overlay(text, duration_s=10)
+                self._show_text_overlay(text_line, duration_s=10)
 
         def _rebuild_log_view(self):
             self.log_box.setPlainText("\n" * 10)
-            for entry, preformatted in self._log_history:
-                self._render_log_line(entry, preformatted, emit_notifications=False)
+            for entry in self._log_history:
+                self._render_log_entry(entry, emit_notifications=False)
             self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
             self._update_log_padding()
 
+        def append_entry(self, entry: dict):
+            self._log_history.append(entry)
+            self._render_log_entry(entry)
+
         def append_line(self, line: str, preformatted: bool = False):
-            self._log_history.append((line, preformatted))
-            self._render_log_line(line, preformatted)
+            entry = _build_log_entry(line)
+            self.append_entry(entry)
 
         def _set_log_to_notifications(self, enabled: bool):
             self._log_to_notifications = bool(enabled)
@@ -2104,8 +2139,8 @@ def _run_debug_window(
                 return
             try:
                 while True:
-                    line = log_queue.get_nowait()
-                    self.append_line(line, preformatted=True)
+                    entry = log_queue.get_nowait()
+                    self.append_entry(entry)
             except queue.Empty:
                 pass
             try:
@@ -2399,7 +2434,7 @@ def _show_notification_overlay(message: str, cfg_raw: dict | None, state: _Notif
 def _start_mqtt_listener(
     cfg_raw: dict,
     stop_event: threading.Event,
-    notify_queue: "queue.Queue[str]",
+    notify_queue: "queue.Queue[dict]",
     log_message,
 ):
     mqtt_cfg = cfg_raw.get("mqtt", {}) if cfg_raw else {}
@@ -2453,7 +2488,7 @@ def _start_mqtt_listener(
             if isinstance(data, dict) and "message" in data:
                 message = str(data.get("message") or "").strip()
                 if message:
-                    notify_queue.put(message)
+                    notify_queue.put(_build_log_entry(message, msg_id="LOG_MQTT_NOTIFICATION", msg_class="OTHER"))
         except Exception as exc:
             log_message(f"MQTT message ignored: {exc}")
 
@@ -3918,10 +3953,10 @@ def main() -> int:
     logging.basicConfig(level=logging.ERROR)
     stop_event = threading.Event()
     debug_request = threading.Event()
-    log_queue: "queue.Queue[str]" = queue.Queue()
-    log_buffer: list[str] = []
+    log_queue: "queue.Queue[dict]" = queue.Queue()
+    log_buffer: list[dict] = []
     ocr_fail_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
-    notify_queue: "queue.Queue[str]" = queue.Queue()
+    notify_queue: "queue.Queue[dict]" = queue.Queue()
     cfg_raw: dict | None = None
     # expose cfg to debug window commands
     global cfg_raw_global
@@ -3930,8 +3965,8 @@ def main() -> int:
     debug_state = {"open": False}
     notify_state = {"in_notify": False}
 
-    def log_message(msg: str):
-        entry = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
+    def log_message(msg: str, msg_id: str | None = None, msg_class: str | None = None):
+        entry = _build_log_entry(msg, msg_id=msg_id, msg_class=msg_class)
         log_buffer.append(entry)
         try:
             log_queue.put(entry)
@@ -3942,7 +3977,7 @@ def main() -> int:
         if not debug_state.get("open"):
             settings = DEBUG_WINDOW_SETTINGS or _read_debug_window_config(cfg_raw_global)
             if settings.get("log_to_notifications"):
-                _, category = _classify_debug_line(msg)
+                category = entry.get("class")
                 if category == "OUTPUT" and not settings.get("output", True):
                     return
                 if category == "INPUT" and not settings.get("input", True):
@@ -4050,10 +4085,13 @@ def main() -> int:
             try:
                 notify_state["in_notify"] = True
                 while True:
-                    msg = notify_queue.get_nowait()
+                    entry = notify_queue.get_nowait()
+                    if not isinstance(entry, dict):
+                        entry = {"ts": "", "msg": str(entry), "class": "OTHER", "id": "LOG_MESSAGE"}
+                    text_line = _format_log_entry(entry)
                     if debug_ui and debug_ui.window:
                         try:
-                            debug_ui.window._show_text_overlay(msg)
+                            debug_ui.window._show_text_overlay(text_line)
                         except Exception:
                             pass
                     else:
@@ -4062,7 +4100,7 @@ def main() -> int:
                             if notify_ui is None:
                                 log_message("Notification overlay unavailable (PySide6 missing)")
                                 continue
-                        _show_notification_overlay(msg, cfg_raw, notify_ui)
+                        _show_notification_overlay(text_line, cfg_raw, notify_ui)
             except queue.Empty:
                 pass
             finally:
