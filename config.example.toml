@@ -7,6 +7,10 @@ config_version = 1
 update_interval_ms = 500      # How often to send REST updates (tweak for performance).
 default_transition_ms = 150   # Crossfade time for REST updates to smooth changes.
 
+[debug_window]
+output = true
+input = true
+
 [notification]
 duration = 10
 font = "alegraya sans sc"

@@ -282,18 +282,19 @@ def _run_debug_window(
             debug_label.setStyleSheet("font-weight: 600;")
             sidebar_layout.addWidget(debug_label)
 
-            self._show_output_logs = True
-            self._show_input_logs = True
+            debug_settings = _read_debug_window_config(cfg_raw_global)
+            self._show_output_logs = debug_settings.get("output", True)
+            self._show_input_logs = debug_settings.get("input", True)
 
             self.debug_output_checkbox = QtWidgets.QCheckBox("Output")
-            self.debug_output_checkbox.setChecked(True)
+            self.debug_output_checkbox.setChecked(self._show_output_logs)
             self.debug_output_checkbox.toggled.connect(
                 lambda checked: self._set_debug_filters(output=checked)
             )
             sidebar_layout.addWidget(self.debug_output_checkbox)
 
             self.debug_input_checkbox = QtWidgets.QCheckBox("Input")
-            self.debug_input_checkbox.setChecked(True)
+            self.debug_input_checkbox.setChecked(self._show_input_logs)
             self.debug_input_checkbox.toggled.connect(
                 lambda checked: self._set_debug_filters(input=checked)
             )
@@ -1969,6 +1970,16 @@ def _run_debug_window(
             if input is not None:
                 self._show_input_logs = bool(input)
             self._rebuild_log_view()
+            self._persist_debug_filters()
+
+        def _persist_debug_filters(self):
+            settings = {
+                "output": bool(self._show_output_logs),
+                "input": bool(self._show_input_logs),
+            }
+            if _upsert_debug_window_in_config(CONFIG_PATH, settings, self.append_line):
+                if cfg_raw_global is not None:
+                    cfg_raw_global["debug_window"] = settings
 
         def _extract_log_category(self, text: str) -> tuple[str, str | None]:
             prefix = ""
@@ -2240,6 +2251,16 @@ def _read_notification_config(cfg_raw: dict | None, default_duration: int = 10) 
         "body_alpha": int(round(255 * (body_opacity / 100.0))),
         "border": border,
         "align": align,
+    }
+
+
+def _read_debug_window_config(cfg_raw: dict | None) -> dict:
+    cfg = {}
+    if cfg_raw:
+        cfg = cfg_raw.get("debug_window", {}) or {}
+    return {
+        "output": bool(cfg.get("output", True)),
+        "input": bool(cfg.get("input", True)),
     }
 
 
@@ -2542,6 +2563,14 @@ def _render_notification_block(settings: dict) -> list[str]:
     return lines
 
 
+def _render_debug_window_block(settings: dict) -> list[str]:
+    lines = ["", "[debug_window]"]
+    lines.append(f"output = {str(bool(settings.get('output', True))).lower()}")
+    lines.append(f"input = {str(bool(settings.get('input', True))).lower()}")
+    lines.append("")
+    return lines
+
+
 def _find_table_block(lines: list[str], table_name: str) -> tuple[int, int] | None:
     start = None
     target = f"[{table_name}]"
@@ -2578,6 +2607,37 @@ def _upsert_notification_in_config(config_path: Path, settings: dict, log_messag
                 insert_idx = idx
                 break
         block_lines = _render_notification_block(settings)
+        if insert_idx == 0 and block_lines and block_lines[0] == "":
+            block_lines = block_lines[1:]
+        lines[insert_idx:insert_idx] = block_lines
+        out = "\n".join(lines)
+        if raw.endswith("\n"):
+            out += "\n"
+        config_path.write_text(out, encoding="utf-8")
+        return True
+    except Exception as exc:
+        log_message(f"Failed to write config: {exc}")
+        return False
+
+
+def _upsert_debug_window_in_config(config_path: Path, settings: dict, log_message) -> bool:
+    if not config_path.exists():
+        log_message(f"Config file not found: {config_path}")
+        return False
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+        lines = raw.splitlines()
+        found = _find_table_block(lines, "debug_window")
+        if found:
+            start, end = found
+            del lines[start:end]
+        insert_idx = len(lines)
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("[") and line.lstrip() == line:
+                insert_idx = idx
+                break
+        block_lines = _render_debug_window_block(settings)
         if insert_idx == 0 and block_lines and block_lines[0] == "":
             block_lines = block_lines[1:]
         lines[insert_idx:insert_idx] = block_lines
