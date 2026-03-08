@@ -3915,6 +3915,9 @@ def main() -> int:
     global cfg_raw_global
     cfg_raw_global = None
 
+    debug_state = {"open": False}
+    notify_state = {"in_notify": False}
+
     def log_message(msg: str):
         entry = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
         log_buffer.append(entry)
@@ -3922,6 +3925,15 @@ def main() -> int:
             log_queue.put(entry)
         except Exception:
             pass
+        if notify_state.get("in_notify"):
+            return
+        if not debug_state.get("open"):
+            settings = _read_debug_window_config(cfg_raw_global)
+            if settings.get("log_to_notifications"):
+                try:
+                    notify_queue.put(entry)
+                except Exception:
+                    pass
     # Log config load once at startup.
     debug_on_start = False
     try:
@@ -4016,7 +4028,9 @@ def main() -> int:
                         debug_ui.app.processEvents()
                 except Exception:
                     debug_ui = None
+            debug_state["open"] = bool(debug_ui and getattr(debug_ui, "window", None))
             try:
+                notify_state["in_notify"] = True
                 while True:
                     msg = notify_queue.get_nowait()
                     if debug_ui and debug_ui.window:
@@ -4033,6 +4047,8 @@ def main() -> int:
                         _show_notification_overlay(msg, cfg_raw, notify_ui)
             except queue.Empty:
                 pass
+            finally:
+                notify_state["in_notify"] = False
             if notify_ui and (not debug_ui):
                 try:
                     notify_ui.app.processEvents()
