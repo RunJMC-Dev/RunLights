@@ -22,6 +22,7 @@ sys.path.insert(0, str(_here / "src"))
 
 PAUSE_EVENT = threading.Event()
 CURRENT_APP_ID: str | None = None
+DEBUG_WINDOW_SETTINGS = {"output": True, "input": True, "log_to_notifications": False}
 
 from runlights.tray import serve_in_thread  # noqa: E402
 from runlights.ipc import PIPE_NAME  # noqa: E402
@@ -1982,6 +1983,8 @@ def _run_debug_window(
             if _upsert_debug_window_in_config(CONFIG_PATH, settings, self.append_line):
                 if cfg_raw_global is not None:
                     cfg_raw_global["debug_window"] = settings
+            global DEBUG_WINDOW_SETTINGS
+            DEBUG_WINDOW_SETTINGS = settings
 
         def _extract_log_category(self, text: str) -> tuple[str, str | None]:
             prefix = ""
@@ -2261,11 +2264,14 @@ def _read_debug_window_config(cfg_raw: dict | None) -> dict:
     cfg = {}
     if cfg_raw:
         cfg = cfg_raw.get("debug_window", {}) or {}
-    return {
+    settings = {
         "output": bool(cfg.get("output", True)),
         "input": bool(cfg.get("input", True)),
         "log_to_notifications": bool(cfg.get("log_to_notifications", False)),
     }
+    global DEBUG_WINDOW_SETTINGS
+    DEBUG_WINDOW_SETTINGS = settings
+    return settings
 
 
 def _ensure_notify_ui() -> _NotifyOverlayState | None:
@@ -2475,6 +2481,7 @@ def _reload_config(log_message):
     try:
         cfg = load_config(CONFIG_PATH)
         cfg_raw_global = cfg.raw
+        _read_debug_window_config(cfg.raw)
         log_message(f"Config reloaded: {cfg.path.resolve()}")
         return cfg.raw
     except Exception as exc:
@@ -3928,7 +3935,7 @@ def main() -> int:
         if notify_state.get("in_notify"):
             return
         if not debug_state.get("open"):
-            settings = _read_debug_window_config(cfg_raw_global)
+            settings = DEBUG_WINDOW_SETTINGS or _read_debug_window_config(cfg_raw_global)
             if settings.get("log_to_notifications"):
                 category = None
                 if msg.startswith("[OUTPUT] "):
@@ -4030,6 +4037,7 @@ def main() -> int:
                 debug_request.clear()
                 try:
                     debug_ui = _run_debug_window(stop_event, log_queue, log_buffer, ocr_fail_queue)
+                    debug_state["open"] = bool(debug_ui and getattr(debug_ui, "window", None))
                 except Exception as exc:
                     log_message(f"Debug window failed: {exc}")
                     debug_ui = None
