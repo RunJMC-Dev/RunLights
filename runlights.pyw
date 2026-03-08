@@ -202,6 +202,24 @@ def _log_input(log_message, msg: str):
     log_message(f"[INPUT] {msg}")
 
 
+def _classify_debug_line(text: str) -> tuple[str, str | None]:
+    prefix = ""
+    body = text
+    if len(text) >= 11 and text[0] == "[" and text[9] == "]" and text[10] == " ":
+        prefix = text[:11]
+        body = text[11:]
+    tag_match = re.search(r"\[(OUTPUT|INPUT)\]\s*", body)
+    if tag_match:
+        category = tag_match.group(1)
+        body = body[:tag_match.start()] + body[tag_match.end():]
+        return prefix + body, category
+    if body.startswith("OCR "):
+        return prefix + body, "INPUT"
+    if body.startswith(("Output:", "Applied ", "WLED ") ):
+        return prefix + body, "OUTPUT"
+    return text, None
+
+
 def _run_debug_window(
     stop_event: threading.Event,
     log_queue: "queue.Queue[str]",
@@ -1987,20 +2005,7 @@ def _run_debug_window(
             DEBUG_WINDOW_SETTINGS = settings
 
         def _extract_log_category(self, text: str) -> tuple[str, str | None]:
-            prefix = ""
-            body = text
-            if len(text) >= 11 and text[0] == "[" and text[9] == "]" and text[10] == " ":
-                prefix = text[:11]
-                body = text[11:]
-            if body.startswith("[OUTPUT] "):
-                return prefix + body[len("[OUTPUT] "):], "OUTPUT"
-            if body.startswith("[INPUT] "):
-                return prefix + body[len("[INPUT] "):], "INPUT"
-            if body.startswith("OCR "):
-                return prefix + body, "INPUT"
-            if body.startswith(("Output:", "Applied ", "WLED ")):
-                return prefix + body, "OUTPUT"
-            return text, None
+            return _classify_debug_line(text)
 
         def _render_log_line(
             self,
@@ -3937,15 +3942,7 @@ def main() -> int:
         if not debug_state.get("open"):
             settings = DEBUG_WINDOW_SETTINGS or _read_debug_window_config(cfg_raw_global)
             if settings.get("log_to_notifications"):
-                category = None
-                if msg.startswith("[OUTPUT] "):
-                    category = "OUTPUT"
-                elif msg.startswith("[INPUT] "):
-                    category = "INPUT"
-                elif msg.startswith("OCR "):
-                    category = "INPUT"
-                elif msg.startswith(("Output:", "Applied ", "WLED ")):
-                    category = "OUTPUT"
+                _, category = _classify_debug_line(msg)
                 if category == "OUTPUT" and not settings.get("output", True):
                     return
                 if category == "INPUT" and not settings.get("input", True):
