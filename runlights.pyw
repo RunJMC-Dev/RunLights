@@ -193,6 +193,14 @@ def _prime_log_buffer(log_queue: "queue.Queue[str]", log_buffer: list[str]):
         pass
 
 
+def _log_output(log_message, msg: str):
+    log_message(f"[OUTPUT] {msg}")
+
+
+def _log_input(log_message, msg: str):
+    log_message(f"[INPUT] {msg}")
+
+
 def _run_debug_window(
     stop_event: threading.Event,
     log_queue: "queue.Queue[str]",
@@ -270,6 +278,27 @@ def _run_debug_window(
             sidebar_layout.addWidget(restart_btn)
             sidebar_layout.addStretch(1)
 
+            debug_label = QtWidgets.QLabel("Debug Messages")
+            debug_label.setStyleSheet("font-weight: 600;")
+            sidebar_layout.addWidget(debug_label)
+
+            self._show_output_logs = True
+            self._show_input_logs = True
+
+            self.debug_output_checkbox = QtWidgets.QCheckBox("Output")
+            self.debug_output_checkbox.setChecked(True)
+            self.debug_output_checkbox.toggled.connect(
+                lambda checked: self._set_debug_filters(output=checked)
+            )
+            sidebar_layout.addWidget(self.debug_output_checkbox)
+
+            self.debug_input_checkbox = QtWidgets.QCheckBox("Input")
+            self.debug_input_checkbox.setChecked(True)
+            self.debug_input_checkbox.toggled.connect(
+                lambda checked: self._set_debug_filters(input=checked)
+            )
+            sidebar_layout.addWidget(self.debug_input_checkbox)
+
             current_app_label = QtWidgets.QLabel("Current: (none)")
             current_app_label.setStyleSheet("color: #9aa0a6;")
             current_app_label.setWordWrap(True)
@@ -307,6 +336,8 @@ def _run_debug_window(
                 self.log_box.blockCountChanged.connect(lambda _=None: self._update_log_padding())
             except Exception:
                 pass
+
+            self._log_history: list[tuple[str, bool]] = []
 
             self._log_to_notifications = False
             self.log_to_notifications_checkbox = QtWidgets.QCheckBox(
@@ -1932,7 +1963,35 @@ def _run_debug_window(
 
             dialog.exec()
 
-        def append_line(self, line: str, preformatted: bool = False):
+        def _set_debug_filters(self, *, output: bool | None = None, input: bool | None = None):
+            if output is not None:
+                self._show_output_logs = bool(output)
+            if input is not None:
+                self._show_input_logs = bool(input)
+            self._rebuild_log_view()
+
+        def _extract_log_category(self, text: str) -> tuple[str, str | None]:
+            prefix = ""
+            body = text
+            if len(text) >= 11 and text[0] == "[" and text[9] == "]" and text[10] == " ":
+                prefix = text[:11]
+                body = text[11:]
+            if body.startswith("[OUTPUT] "):
+                return prefix + body[len("[OUTPUT] "):], "OUTPUT"
+            if body.startswith("[INPUT] "):
+                return prefix + body[len("[INPUT] "):], "INPUT"
+            if body.startswith("OCR "):
+                return prefix + body, "INPUT"
+            if body.startswith(("Output:", "Applied ", "WLED ")):
+                return prefix + body, "OUTPUT"
+            return text, None
+
+        def _render_log_line(
+            self,
+            line: str,
+            preformatted: bool = False,
+            emit_notifications: bool = True,
+        ):
             if preformatted:
                 text = line
             else:
@@ -1941,11 +2000,27 @@ def _run_debug_window(
                 if "\n" in text:
                     indent = " " * len(prefix)
                     text = text.replace("\n", "\n" + indent)
+            text, category = self._extract_log_category(text)
+            if category == "OUTPUT" and not self._show_output_logs:
+                return
+            if category == "INPUT" and not self._show_input_logs:
+                return
             self.log_box.appendPlainText(text)
             self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
             self._update_log_padding()
-            if self._log_to_notifications:
+            if emit_notifications and self._log_to_notifications:
                 self._show_text_overlay(text, duration_s=10)
+
+        def _rebuild_log_view(self):
+            self.log_box.setPlainText("\n" * 10)
+            for entry, preformatted in self._log_history:
+                self._render_log_line(entry, preformatted, emit_notifications=False)
+            self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
+            self._update_log_padding()
+
+        def append_line(self, line: str, preformatted: bool = False):
+            self._log_history.append((line, preformatted))
+            self._render_log_line(line, preformatted)
 
         def _set_log_to_notifications(self, enabled: bool):
             self._log_to_notifications = bool(enabled)
@@ -2658,6 +2733,10 @@ def _apply_ocr_delimiter(mode: dict, text: str, log_message=None) -> str:
 
 
 def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
+    log_message_raw = log_message
+    def log_output(msg: str):
+        _log_output(log_message_raw, msg)
+    log_message = log_output
     output_type = mode.get("output")
     if output_type == "fullfade":
         output_type = "crossfade"
@@ -3014,6 +3093,10 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
 
 
 def _apply_segmentsolid_base(mode: dict, cfg_raw: dict, log_message):
+    log_message_raw = log_message
+    def log_output(msg: str):
+        _log_output(log_message_raw, msg)
+    log_message = log_output
     bindings = mode.get("bindings", {})
     controllers_filter = mode.get("controllers", [])
     acolor = mode.get("acolor", "#000000")
@@ -3059,6 +3142,10 @@ def _apply_segmentsolid_base(mode: dict, cfg_raw: dict, log_message):
 
 
 def _apply_preset(controller_id: str, preset: str, cfg_raw: dict, log_message):
+    log_message_raw = log_message
+    def log_output(msg: str):
+        _log_output(log_message_raw, msg)
+    log_message = log_output
     ctrl_entry = _lookup_controller_insensitive(cfg_raw, controller_id)
     if not ctrl_entry:
         log_message(f"Controller {controller_id} not found")
@@ -3080,6 +3167,10 @@ def _apply_preset(controller_id: str, preset: str, cfg_raw: dict, log_message):
 
 def _log_current_preset(controller_id: str, cfg_raw: dict, log_message):
     """Fetch and log the current preset (id and name if available) for a controller."""
+    log_message_raw = log_message
+    def log_output(msg: str):
+        _log_output(log_message_raw, msg)
+    log_message = log_output
     ctrl_entry = _lookup_controller_insensitive(cfg_raw, controller_id)
     if not ctrl_entry:
         log_message(f"Controller {controller_id} not found")
@@ -3114,6 +3205,10 @@ def _log_current_preset(controller_id: str, cfg_raw: dict, log_message):
 
 
 def _apply_gaming_preset(cfg_raw: dict, preset_name: str, log_message):
+    log_message_raw = log_message
+    def log_output(msg: str):
+        _log_output(log_message_raw, msg)
+    log_message = log_output
     transition_ms = cfg_raw.get("default_transition_ms")
     for ctrl_entry in cfg_raw.get("controllers", []):
         cid = ctrl_entry.get("id")
@@ -3129,6 +3224,10 @@ def _apply_gaming_preset(cfg_raw: dict, preset_name: str, log_message):
 
 
 def _apply_idle_preset(cfg_raw: dict, log_message):
+    log_message_raw = log_message
+    def log_output(msg: str):
+        _log_output(log_message_raw, msg)
+    log_message = log_output
     transition_ms = cfg_raw.get("default_transition_ms")
     applied = 0
     for ctrl_entry in cfg_raw.get("controllers", []):
@@ -3154,6 +3253,10 @@ def _apply_idle_preset(cfg_raw: dict, log_message):
 
 
 def _apply_idle(cfg_raw: dict, log_message):
+    log_message_raw = log_message
+    def log_output(msg: str):
+        _log_output(log_message_raw, msg)
+    log_message = log_output
     idle_cfg = cfg_raw.get("idle")
     if not idle_cfg:
         return
@@ -3284,6 +3387,11 @@ def _extract_number(text: str) -> float | None:
 
 def _apply_input_range(mode: dict, value: float | None, log_message=None) -> float | None:
     """Normalize input to 0-100 when inputrangemin/max are set."""
+    if log_message:
+        log_message_raw = log_message
+        def log_input(msg: str):
+            _log_input(log_message_raw, msg)
+        log_message = log_input
     if value is None:
         return None
     try:
@@ -3532,6 +3640,10 @@ def _ingame_match_color(img, target: tuple[int, int, int], tol: int, min_percent
 
 
 def _ingame_check(entry: dict, now: float, log_message) -> bool:
+    log_message_raw = log_message
+    def log_input(msg: str):
+        _log_input(log_message_raw, msg)
+    log_message = log_input
     ingame = entry.get("ingame")
     if not ingame:
         return True
@@ -3639,6 +3751,10 @@ def _ocr_poll_loop(
     log_message,
     ocr_fail_queue: "queue.Queue[tuple[str, str]] | None" = None,
 ):
+    log_message_raw = log_message
+    def log_input(msg: str):
+        _log_input(log_message_raw, msg)
+    log_message = log_input
     entries = _collect_ocr_modes(cfg_raw)
     if not entries:
         return
