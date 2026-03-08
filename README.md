@@ -30,7 +30,37 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - `notification` block controls the `notify` debug overlay (duration seconds, font, fontsize, fontcolour, padding, bodycolour, bodyopacity 0-100, border px, align topcenter).
 - `mqtt` block enables Home Assistant notifications over MQTT; it subscribes to a topic and expects JSON with a `message` field (everything else ignored).
 - For `screen_region` inputs, set `interval_ms` on a mode to control OCR refresh rate (default 1000ms).
+- Optional in-game gate for `screen_region` modes: add an `ingame` block to only run OCR when a marker is visible.
+  - `type = "color"`: match a UI color in a small region (cheap, no OCR).
+  - `type = "text"`: OCR a small region and match `text` or `regex`.
+  - Gate options: `x/y/width/height`, `interval_ms`, `hold_ms`, `tolerance`, `min_percent`, `sample_step`.
 - Outputs support `dangertype = "flash"` with `dangerthreshold` (numeric, compared to input value).
+
+
+Example: in-game gate for a health OCR mode
+```toml
+[[application.modes]]
+id = "health"
+input = "screen_region"
+output = "crossfade"
+x = 140
+y = 458
+width = 100
+height = 200
+controllers = ["PCROOMLHS"]
+
+  [application.modes.ingame]
+  type = "color"
+  x = 120
+  y = 420
+  width = 40
+  height = 20
+  color = "#ffffff"
+  tolerance = 30
+  min_percent = 2
+  interval_ms = 300
+  hold_ms = 1500
+```
 
 ## Mode Inputs/Outputs
 Inputs

@@ -3295,6 +3295,38 @@ def _apply_input_range(mode: dict, value: float | None, log_message=None) -> flo
         return None
 
 
+
+def _parse_color_value(value: str):
+    color_name = str(value).strip().lower()
+    color_map = {
+        "red": (255, 0, 0),
+        "green": (0, 255, 0),
+        "blue": (0, 0, 255),
+        "yellow": (255, 255, 0),
+        "cyan": (0, 255, 255),
+        "magenta": (255, 0, 255),
+        "white": (255, 255, 255),
+        "black": (0, 0, 0),
+    }
+    try:
+        return color_map.get(color_name) or wled._hex_to_rgb(color_name)
+    except Exception as exc:
+        raise ValueError(f"Invalid color '{value}': {exc}") from exc
+
+
+def _capture_region(region: tuple[int, int, int, int]):
+    try:
+        from PIL import ImageGrab  # type: ignore
+    except Exception as exc:
+        return None, f"Pillow ImageGrab unavailable: {exc}"
+    x, y, w, h = region
+    try:
+        img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
+    except Exception as exc:
+        return None, f"Capture failed: {exc}"
+    return img, None
+
+
 def _perform_ocr(
     region: tuple[int, int, int, int],
     include_image: bool = False,
@@ -3304,15 +3336,13 @@ def _perform_ocr(
     if pytesseract is None:
         return None, "pytesseract not available", None
     try:
-        from PIL import ImageEnhance, ImageGrab, ImageOps  # type: ignore
+        from PIL import ImageEnhance, ImageOps  # type: ignore
     except Exception as exc:
         return None, f"Pillow ImageGrab unavailable: {exc}", None
 
-    x, y, w, h = region
-    try:
-        img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
-    except Exception as exc:
-        return None, f"Capture failed: {exc}", None
+    img, err = _capture_region(region)
+    if err:
+        return None, err, None
     try:
         ocr_threshold = 140
         ocr_contrast = 1.0
@@ -3337,19 +3367,8 @@ def _perform_ocr(
 
         gray = None
         if ocr_color:
-            color_name = str(ocr_color).strip().lower()
-            color_map = {
-                "red": (255, 0, 0),
-                "green": (0, 255, 0),
-                "blue": (0, 0, 255),
-                "yellow": (255, 255, 0),
-                "cyan": (0, 255, 255),
-                "magenta": (255, 0, 255),
-                "white": (255, 255, 255),
-                "black": (0, 0, 0),
-            }
             try:
-                target = color_map.get(color_name) or wled._hex_to_rgb(color_name)
+                target = _parse_color_value(str(ocr_color))
             except Exception as exc:
                 return None, f"Invalid ocr_color '{ocr_color}': {exc}", None
             try:
@@ -3401,6 +3420,39 @@ def _collect_ocr_modes(cfg_raw: dict):
                 interval_ms = int(mode.get("interval_ms", mode.get("sample_ms", 1000)))
             except Exception:
                 interval_ms = 1000
+            ingame_cfg = None
+            ingame = mode.get("ingame")
+            if isinstance(ingame, dict):
+                ingame_type = str(ingame.get("type", "color")).strip().lower() or "color"
+                if ingame_type not in ("color", "text"):
+                    ingame_type = "color"
+                ingame_region = _ingame_region(mode) or region
+                try:
+                    ingame_interval_ms = int(ingame.get("interval_ms", 500))
+                except Exception:
+                    ingame_interval_ms = 500
+                try:
+                    ingame_hold_ms = int(ingame.get("hold_ms", 1500))
+                except Exception:
+                    ingame_hold_ms = 1500
+                ingame_cfg = {
+                    "type": ingame_type,
+                    "region": ingame_region,
+                    "interval": max(100, ingame_interval_ms) / 1000.0,
+                    "hold": max(0, ingame_hold_ms) / 1000.0,
+                    "color": ingame.get("color"),
+                    "tolerance": ingame.get("tolerance", 40),
+                    "min_percent": ingame.get("min_percent", 3),
+                    "sample_step": ingame.get("sample_step", 1),
+                    "text": ingame.get("text"),
+                    "regex": ingame.get("regex"),
+                    "ocr_mode": _ingame_ocr_settings(mode, ingame),
+                    "next": 0.0,
+                    "until": 0.0,
+                    "active": False,
+                    "warned_missing": False,
+                    "warned_error": False,
+                }
             modes.append(
                 {
                     "app_id": app.get("id", "(unknown)"),
@@ -3411,9 +3463,147 @@ def _collect_ocr_modes(cfg_raw: dict):
                     "interval": max(50, interval_ms) / 1000.0,
                     "last_text": None,
                     "next": 0.0,
+                    "ingame": ingame_cfg,
                 }
             )
     return modes
+
+
+
+def _ingame_region(mode: dict) -> tuple[int, int, int, int] | None:
+    ingame = mode.get("ingame")
+    if not isinstance(ingame, dict):
+        return None
+    region = _mode_region(ingame)
+    if region:
+        return region
+    return _mode_region(mode)
+
+
+def _ingame_ocr_settings(mode: dict, ingame: dict) -> dict:
+    settings: dict = {}
+    for key in (
+        "ocr_threshold",
+        "ocr_contrast",
+        "ocr_invert",
+        "ocr_color",
+        "ocr_color_tolerance",
+    ):
+        if key in ingame:
+            settings[key] = ingame.get(key)
+        elif key in mode:
+            settings[key] = mode.get(key)
+    return settings
+
+
+def _ingame_match_color(img, target: tuple[int, int, int], tol: int, min_percent: float, step: int) -> bool:
+    try:
+        rgb = img.convert("RGB")
+    except Exception:
+        return False
+    data = list(rgb.getdata())
+    if not data:
+        return False
+    step = max(1, int(step))
+    if step > 1:
+        data = data[::step]
+    total = len(data)
+    if total == 0:
+        return False
+    tr, tg, tb = target
+    matched = 0
+    for r, g, b in data:
+        if max(abs(r - tr), abs(g - tg), abs(b - tb)) <= tol:
+            matched += 1
+    pct = (matched / total) * 100.0
+    return pct >= min_percent
+
+
+def _ingame_check(entry: dict, now: float, log_message) -> bool:
+    ingame = entry.get("ingame")
+    if not ingame:
+        return True
+    if now < ingame["next"]:
+        return now <= ingame["until"]
+    ingame["next"] = now + ingame["interval"]
+    ingame_type = ingame.get("type", "color")
+    region = ingame.get("region") or entry.get("region")
+    if not region:
+        return False
+    matched = False
+    if ingame_type == "color":
+        color = ingame.get("color")
+        if not color:
+            if not ingame.get("warned_missing"):
+                log_message(
+                    f"OCR {entry['app_id']}.{entry['mode_id']}: ingame.color missing; OCR gated off"
+                )
+                ingame["warned_missing"] = True
+            matched = False
+        else:
+            try:
+                target = _parse_color_value(str(color))
+            except Exception as exc:
+                if not ingame.get("warned_missing"):
+                    log_message(
+                        f"OCR {entry['app_id']}.{entry['mode_id']}: ingame.color invalid ({exc}); OCR gated off"
+                    )
+                    ingame["warned_missing"] = True
+                matched = False
+            else:
+                tol = int(ingame.get("tolerance", 40))
+                min_percent = float(ingame.get("min_percent", 3))
+                step = int(ingame.get("sample_step", 1))
+                img, err = _capture_region(region)
+                if err:
+                    if not ingame.get("warned_error"):
+                        log_message(
+                            f"OCR {entry['app_id']}.{entry['mode_id']}: ingame capture failed: {err}"
+                        )
+                        ingame["warned_error"] = True
+                    matched = False
+                else:
+                    matched = _ingame_match_color(img, target, tol, min_percent, step)
+    else:
+        text = ingame.get("text")
+        pattern = ingame.get("regex")
+        if not text and not pattern:
+            if not ingame.get("warned_missing"):
+                log_message(
+                    f"OCR {entry['app_id']}.{entry['mode_id']}: ingame.text/regex missing; OCR gated off"
+                )
+                ingame["warned_missing"] = True
+            matched = False
+        else:
+            ocr_mode = ingame.get("ocr_mode") or entry.get("mode")
+            ocr_text, err, _ = _perform_ocr(region, mode=ocr_mode)
+            if err:
+                if not ingame.get("warned_error"):
+                    log_message(f"OCR {entry['app_id']}.{entry['mode_id']}: ingame OCR failed: {err}")
+                    ingame["warned_error"] = True
+                matched = False
+            else:
+                if not ocr_text:
+                    matched = False
+                else:
+                    haystack = ocr_text.lower()
+                    if text and str(text).lower() in haystack:
+                        matched = True
+                    if not matched and pattern:
+                        try:
+                            if re.search(str(pattern), ocr_text, re.IGNORECASE):
+                                matched = True
+                        except Exception:
+                            matched = False
+
+    if matched:
+        ingame["until"] = now + ingame["hold"]
+    active = now <= ingame["until"]
+    if active != ingame.get("active"):
+        state = "detected" if active else "lost"
+        log_message(f"OCR {entry['app_id']}.{entry['mode_id']}: in-game {state}")
+        ingame["active"] = active
+    return active
 
 
 def _process_running(targets: list[str]) -> bool:
@@ -3461,9 +3651,6 @@ def _ocr_poll_loop(
                 continue
             now = time.monotonic()
             for entry in entries:
-                if now < entry["next"]:
-                    continue
-                entry["next"] = now + entry["interval"]
                 if not _process_running(entry["processes"]):
                     continue
                 if win32gui and win32process:
@@ -3477,6 +3664,11 @@ def _ocr_poll_loop(
                                 continue
                     except Exception:
                         pass
+                if not _ingame_check(entry, now, log_message):
+                    continue
+                if now < entry["next"]:
+                    continue
+                entry["next"] = now + entry["interval"]
                 text, err, _ = _perform_ocr(entry["region"], mode=entry["mode"])
                 if err:
                     log_message(f"OCR {entry['app_id']}.{entry['mode_id']}: {err}")
