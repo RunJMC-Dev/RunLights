@@ -3930,6 +3930,19 @@ def main() -> int:
         if not debug_state.get("open"):
             settings = _read_debug_window_config(cfg_raw_global)
             if settings.get("log_to_notifications"):
+                category = None
+                if msg.startswith("[OUTPUT] "):
+                    category = "OUTPUT"
+                elif msg.startswith("[INPUT] "):
+                    category = "INPUT"
+                elif msg.startswith("OCR "):
+                    category = "INPUT"
+                elif msg.startswith(("Output:", "Applied ", "WLED ")):
+                    category = "OUTPUT"
+                if category == "OUTPUT" and not settings.get("output", True):
+                    return
+                if category == "INPUT" and not settings.get("input", True):
+                    return
                 try:
                     notify_queue.put(entry)
                 except Exception:
