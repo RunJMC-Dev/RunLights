@@ -308,6 +308,13 @@ def _run_debug_window(
             except Exception:
                 pass
 
+            self._log_to_notifications = False
+            self.log_to_notifications_checkbox = QtWidgets.QCheckBox(
+                "Output log to on screen notifications."
+            )
+            self.log_to_notifications_checkbox.toggled.connect(self._set_log_to_notifications)
+            layout.addWidget(self.log_to_notifications_checkbox)
+
             self.preview_overlay = QtWidgets.QLabel(self)
             self.preview_overlay.setVisible(False)
             self.preview_overlay.setAlignment(QtCore.Qt.AlignCenter)
@@ -1937,6 +1944,11 @@ def _run_debug_window(
             self.log_box.appendPlainText(text)
             self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
             self._update_log_padding()
+            if self._log_to_notifications:
+                self._show_text_overlay(text, duration_s=10)
+
+        def _set_log_to_notifications(self, enabled: bool):
+            self._log_to_notifications = bool(enabled)
 
         def show_preview(self, pil_image):
             try:

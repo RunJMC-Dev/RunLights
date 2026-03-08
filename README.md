@@ -106,6 +106,7 @@ Outputs
 - `tasksearch <term>`: list running tasks that contain term.
 - `appconfig`: opens a dialog to add/configure an `[[application]]` entry (includes a process picker and optional input/output mode settings).
 - `notification`: use the Debug window sidebar button to edit notify overlay settings (includes a test button and font picker).
+- Debug window checkbox "Output log to on screen notifications." mirrors log lines as the on-screen overlay.
 - `reloadconfig`: reload config.toml (threads keep old config).
 - Mode editor test output is automatically stopped when the dialog closes.
 - Mode editor test output applies `gaming_preset` on start and `idle_preset` on stop/close.
