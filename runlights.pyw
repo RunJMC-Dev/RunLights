@@ -4018,6 +4018,11 @@ def main() -> int:
                 pass
             finally:
                 notify_state["in_notify"] = False
+            if _NOTIFY_UI_STATE is not None:
+                try:
+                    _NOTIFY_UI_STATE.app.processEvents()
+                except Exception:
+                    pass
             time.sleep(0.1)
     except KeyboardInterrupt:
         stop_event.set()
