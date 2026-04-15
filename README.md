@@ -27,7 +27,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - Modes are keyed off process names; can include screen-region inputs, range mapping, and outputs such as `crossfade` (whole strip brightness from range) and `segmentsolid` (target segment vs others with A/B colors/brightness).
 - `idle` block defines color/brightness/transition when idle or when watched apps close.
 - ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` for `segmentsolid`.
-- `notification` block controls the `notify` debug overlay (duration seconds, font, fontsize, fontcolour, padding, bodycolour, bodyopacity 0-100, border px, align topcenter).
+- `notification` block controls the `notify` debug overlay (duration seconds, font, fontsize, fontcolour, padding, bodycolour, bodyopacity 0-100, border px, timestamp on/off, align topcenter).
 - `debug_window` block controls Debug Messages filters (output/input booleans) plus log mirroring (log_to_notifications).
 - `mqtt` block enables Home Assistant notifications over MQTT; it subscribes to a topic and expects JSON with a `message` field (everything else ignored).
 - For `screen_region` inputs, set `interval_ms` on a mode to control OCR refresh rate (default 1000ms).

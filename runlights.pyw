@@ -189,6 +189,18 @@ def _format_log_entry(entry: dict) -> str:
     return msg
 
 
+def _format_notification_text(payload: dict | str, cfg_raw: dict | None, default_duration: int = 10) -> str:
+    settings = _read_notification_config(cfg_raw, default_duration=default_duration)
+    if isinstance(payload, dict):
+        if settings.get("timestamp", True):
+            return _format_log_entry(payload)
+        return str(payload.get("msg", ""))
+    message = str(payload)
+    if settings.get("timestamp", True):
+        return f"[{datetime.now().strftime('%H:%M:%S')}] {message}"
+    return message
+
+
 def _prime_log_buffer(log_queue: "queue.Queue[dict]", log_buffer: list[dict]):
     """Drain any queued messages into the buffer before rendering the UI."""
     try:
@@ -1825,6 +1837,9 @@ def _run_debug_window(
             border.setRange(0, 10)
             border.setValue(_int_val(current.get("border", 0), 0))
 
+            timestamp = QtWidgets.QCheckBox("Prefix notifications with time")
+            timestamp.setChecked(bool(current.get("timestamp", True)))
+
             align = QtWidgets.QComboBox()
             align.addItems(["topcenter"])
             align_val = str(current.get("align", "topcenter")).strip().lower() or "topcenter"
@@ -1841,6 +1856,7 @@ def _run_debug_window(
             form.addRow("Body colour", bodycolour)
             form.addRow("Body opacity", bodyopacity)
             form.addRow("Border", border)
+            form.addRow("", timestamp)
             form.addRow("Align", align)
             form.addRow("Test message", test_message)
 
@@ -1864,6 +1880,7 @@ def _run_debug_window(
                     "bodycolour": bodycolour.text().strip() or "#000000",
                     "bodyopacity": bodyopacity.value(),
                     "border": border.value(),
+                    "timestamp": bool(timestamp.isChecked()),
                     "align": align.currentText().strip() or "topcenter",
                 }
 
@@ -1929,7 +1946,7 @@ def _run_debug_window(
             self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
             self._update_log_padding()
             if emit_notifications and self._log_to_notifications:
-                _show_shared_notification(text_line, cfg_raw_global, default_duration=10)
+                _show_shared_notification(entry, cfg_raw_global, default_duration=10)
 
         def _rebuild_log_view(self):
             self.log_box.setPlainText("\n" * 10)
@@ -2168,6 +2185,7 @@ def _read_notification_config(cfg_raw: dict | None, default_duration: int = 10) 
         "body_alpha": int(round(255 * (body_opacity / 100.0))),
         "border": border,
         "align": align,
+        "timestamp": bool(cfg.get("timestamp", True)),
     }
 
 
@@ -2308,7 +2326,7 @@ def _show_notification_overlay(
 
 
 def _show_shared_notification(
-    message: str,
+    payload: dict | str,
     cfg_raw: dict | None,
     default_duration: int = 10,
     override: dict | None = None,
@@ -2328,12 +2346,8 @@ def _show_shared_notification(
     if _NOTIFY_UI_STATE is None:
         return False
 
-    _show_notification_overlay(
-        message,
-        cfg_source,
-        _NOTIFY_UI_STATE,
-        default_duration=default_duration,
-    )
+    message = _format_notification_text(payload, cfg_source, default_duration=default_duration)
+    _show_notification_overlay(message, cfg_source, _NOTIFY_UI_STATE, default_duration=default_duration)
     try:
         _NOTIFY_UI_STATE.app.processEvents()
     except Exception:
@@ -2519,6 +2533,7 @@ def _render_notification_block(settings: dict) -> list[str]:
     lines.append(f"bodycolour = \"{_toml_escape(str(settings.get('bodycolour', '#000000')).strip() or '#000000')}\"")
     lines.append(f"bodyopacity = {_int_val(settings.get('bodyopacity', 50), 50)}")
     lines.append(f"border = {_int_val(settings.get('border', 0), 0)}")
+    lines.append(f"timestamp = {str(bool(settings.get('timestamp', True))).lower()}")
     lines.append(f"align = \"{_toml_escape(str(settings.get('align', 'topcenter')).strip() or 'topcenter')}\"")
     lines.append("")
     return lines
@@ -3997,8 +4012,7 @@ def main() -> int:
                     entry = notify_queue.get_nowait()
                     if not isinstance(entry, dict):
                         entry = {"ts": "", "msg": str(entry), "class": "OTHER", "id": "LOG_MESSAGE"}
-                    text_line = _format_log_entry(entry)
-                    if not _show_shared_notification(text_line, cfg_raw):
+                    if not _show_shared_notification(entry, cfg_raw):
                         log_message("Notification overlay unavailable (PySide6 missing)")
             except queue.Empty:
                 pass
