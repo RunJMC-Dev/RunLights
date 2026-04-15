@@ -447,69 +447,6 @@ def _run_debug_window(
                     painter.end()
 
             self.overlay_rect_cls = OverlayRect
-            self.text_overlay = None
-            self._text_overlay_timer = QtCore.QTimer(self)
-            self._text_overlay_timer.setSingleShot(True)
-            self._text_overlay_timer.timeout.connect(self._hide_text_overlay)
-
-            class TextOverlay(QtWidgets.QWidget):
-                def __init__(self):
-                    super().__init__()
-                    self.setWindowFlags(
-                        QtCore.Qt.FramelessWindowHint
-                        | QtCore.Qt.WindowStaysOnTopHint
-                        | QtCore.Qt.Window
-                        | QtCore.Qt.ToolTip
-                    )
-                    self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
-                    self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
-                    self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
-                    self.setFocusPolicy(QtCore.Qt.NoFocus)
-
-                    layout = QtWidgets.QHBoxLayout(self)
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    self.label = QtWidgets.QLabel(self)
-                    self._base_font = self.label.font()
-                    self._base_font.setBold(True)
-                    self.label.setFont(self._base_font)
-                    layout.addWidget(self.label)
-
-                def set_text(self, text: str):
-                    self.label.setText(text)
-                    self.label.adjustSize()
-                    self.adjustSize()
-
-                def apply_style(
-                    self,
-                    *,
-                    font_family: str | None,
-                    font_size: int,
-                    font_color: str,
-                    body_color: str,
-                    body_alpha: int,
-                    padding: int,
-                    border: int,
-                ):
-                    font = QtGui.QFont(self._base_font)
-                    if font_family:
-                        font.setFamily(font_family)
-                    font.setPointSize(max(8, int(font_size)))
-                    self.label.setFont(font)
-                    border_css = "none" if border <= 0 else f"{border}px solid rgba(200,200,200,160)"
-                    self.label.setStyleSheet(
-                        "color: {font_color}; background: rgba({r},{g},{b},{a});"
-                        "border: {border}; padding: {padding}px; border-radius: 6px;".format(
-                            font_color=font_color,
-                            r=body_color[0],
-                            g=body_color[1],
-                            b=body_color[2],
-                            a=body_alpha,
-                            border=border_css,
-                            padding=max(0, int(padding)),
-                        )
-                    )
-
-            self.text_overlay_cls = TextOverlay
 
             input_row = QtWidgets.QHBoxLayout()
             class HistoryLineEdit(QtWidgets.QLineEdit):
@@ -637,11 +574,6 @@ def _run_debug_window(
             try:
                 if self.overlay:
                     self.overlay.hide()
-            except Exception:
-                pass
-            try:
-                if self.text_overlay:
-                    self.text_overlay.hide()
             except Exception:
                 pass
             return super().closeEvent(event)
@@ -910,8 +842,10 @@ def _run_debug_window(
                 if not message:
                     self.append_line("Usage: notify <message>")
                     return
-                self._show_text_overlay(message, duration_s=10)
-                self.append_line("Text overlay shown for 10s")
+                if _show_shared_notification(message, cfg_raw_global, default_duration=10):
+                    self.append_line("Text overlay shown for 10s")
+                else:
+                    self.append_line("Notification overlay unavailable (PySide6 missing)")
             elif cmd.startswith("tasksearch"):
                 if psutil is None:
                     self.append_line("Task search unavailable (psutil not installed)")
@@ -943,77 +877,6 @@ def _run_debug_window(
                     self._build_completer()
             else:
                 self.append_line(f"Unknown command: {cmd}")
-
-        def _hide_text_overlay(self):
-            if self.text_overlay:
-                self.text_overlay.hide()
-
-        def _show_text_overlay(self, message: str, duration_s: int = 10):
-            def _int_val(value, default):
-                try:
-                    return int(float(value))
-                except Exception:
-                    return default
-
-            cfg = {}
-            if cfg_raw_global:
-                cfg = cfg_raw_global.get("notification", {}) or {}
-            if getattr(self, "_notify_override", None):
-                cfg = {**cfg, **self._notify_override}
-
-            duration_cfg = _int_val(cfg.get("duration", duration_s), duration_s)
-            font_family = str(cfg.get("font", "")).strip() or None
-            font_size = _int_val(cfg.get("fontsize", 24), 24)
-            font_color = str(cfg.get("fontcolour", "#FFFFFF")).strip() or "#FFFFFF"
-            padding = _int_val(cfg.get("padding", 6), 6)
-            body_color_hex = str(cfg.get("bodycolour", "#000000")).strip() or "#000000"
-            body_opacity = _int_val(cfg.get("bodyopacity", 50), 50)
-            body_opacity = max(0, min(100, body_opacity))
-            border = _int_val(cfg.get("border", 0), 0)
-            align = str(cfg.get("align", "topcenter")).strip().lower()
-
-            try:
-                body_color = wled._hex_to_rgb(body_color_hex)
-            except Exception:
-                body_color = (0, 0, 0)
-
-            if not self.text_overlay:
-                self.text_overlay = self.text_overlay_cls()
-            try:
-                self.text_overlay.apply_style(
-                    font_family=font_family,
-                    font_size=font_size,
-                    font_color=font_color,
-                    body_color=body_color,
-                    body_alpha=int(round(255 * (body_opacity / 100.0))),
-                    padding=padding,
-                    border=border,
-                )
-            except Exception:
-                pass
-            self.text_overlay.set_text(message)
-            app = QtWidgets.QApplication.instance()
-            screen = app.primaryScreen() if app else None
-            if screen is None and app:
-                screens = app.screens()
-                if screens:
-                    screen = screens[0]
-            if screen:
-                geo = screen.availableGeometry()
-                self.text_overlay.adjustSize()
-                ow = self.text_overlay.width()
-                if align in ("topcenter", "top-center", "top_center"):
-                    x = geo.x() + max(0, (geo.width() - ow) // 2)
-                    y = geo.y() + 24
-                else:
-                    x = geo.x() + max(0, (geo.width() - ow) // 2)
-                    y = geo.y() + 24
-                self.text_overlay.move(x, y)
-            self.text_overlay.show()
-            self.text_overlay.raise_()
-            self.text_overlay.repaint()
-            self._text_overlay_timer.stop()
-            self._text_overlay_timer.start(max(1, int(duration_cfg * 1000)))
 
         def _show_app_config_dialog(self):
             dialog = QtWidgets.QDialog(self)
@@ -2006,7 +1869,12 @@ def _run_debug_window(
 
             def _on_test():
                 self._notify_override = _collect_settings()
-                self._show_text_overlay(test_message.text().strip() or "Notification test", duration_s=10)
+                _show_shared_notification(
+                    test_message.text().strip() or "Notification test",
+                    cfg_raw_global,
+                    default_duration=10,
+                    override=self._notify_override,
+                )
                 self._notify_override = None
 
             def _on_save():
@@ -2061,7 +1929,7 @@ def _run_debug_window(
             self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
             self._update_log_padding()
             if emit_notifications and self._log_to_notifications:
-                self._show_text_overlay(text_line, duration_s=10)
+                _show_shared_notification(text_line, cfg_raw_global, default_duration=10)
 
         def _rebuild_log_view(self):
             self.log_box.setPlainText("\n" * 10)
@@ -2260,6 +2128,9 @@ class _NotifyOverlayState:
         self.timer = timer
 
 
+_NOTIFY_UI_STATE: _NotifyOverlayState | None = None
+
+
 def _read_notification_config(cfg_raw: dict | None, default_duration: int = 10) -> dict:
     def _int_val(value, default):
         try:
@@ -2388,8 +2259,13 @@ def _ensure_notify_ui() -> _NotifyOverlayState | None:
     return _NotifyOverlayState(app, overlay, timer)
 
 
-def _show_notification_overlay(message: str, cfg_raw: dict | None, state: _NotifyOverlayState):
-    settings = _read_notification_config(cfg_raw)
+def _show_notification_overlay(
+    message: str,
+    cfg_raw: dict | None,
+    state: _NotifyOverlayState,
+    default_duration: int = 10,
+):
+    settings = _read_notification_config(cfg_raw, default_duration=default_duration)
     state.overlay.apply_style(
         font_family=settings["font_family"],
         font_size=settings["font_size"],
@@ -2429,6 +2305,40 @@ def _show_notification_overlay(message: str, cfg_raw: dict | None, state: _Notif
     state.overlay.repaint()
     state.timer.stop()
     state.timer.start(max(1, int(settings["duration"] * 1000)))
+
+
+def _show_shared_notification(
+    message: str,
+    cfg_raw: dict | None,
+    default_duration: int = 10,
+    override: dict | None = None,
+) -> bool:
+    global _NOTIFY_UI_STATE
+
+    cfg_source = cfg_raw
+    if override:
+        cfg_source = dict(cfg_raw or {})
+        cfg_source["notification"] = {
+            **((cfg_source.get("notification", {}) or {})),
+            **override,
+        }
+
+    if _NOTIFY_UI_STATE is None:
+        _NOTIFY_UI_STATE = _ensure_notify_ui()
+    if _NOTIFY_UI_STATE is None:
+        return False
+
+    _show_notification_overlay(
+        message,
+        cfg_source,
+        _NOTIFY_UI_STATE,
+        default_duration=default_duration,
+    )
+    try:
+        _NOTIFY_UI_STATE.app.processEvents()
+    except Exception:
+        pass
+    return True
 
 
 def _start_mqtt_listener(
@@ -4043,7 +3953,6 @@ def main() -> int:
 
     tray_icon = start_tray_icon(stop_event, debug_request)
     debug_ui: _DebugWindowState | None = None
-    notify_ui: _NotifyOverlayState | None = None
     if cfg is not None:
         _start_mqtt_listener(cfg.raw, stop_event, notify_queue, log_message)
 
@@ -4089,27 +3998,12 @@ def main() -> int:
                     if not isinstance(entry, dict):
                         entry = {"ts": "", "msg": str(entry), "class": "OTHER", "id": "LOG_MESSAGE"}
                     text_line = _format_log_entry(entry)
-                    if debug_ui and debug_ui.window:
-                        try:
-                            debug_ui.window._show_text_overlay(text_line)
-                        except Exception:
-                            pass
-                    else:
-                        if notify_ui is None:
-                            notify_ui = _ensure_notify_ui()
-                            if notify_ui is None:
-                                log_message("Notification overlay unavailable (PySide6 missing)")
-                                continue
-                        _show_notification_overlay(text_line, cfg_raw, notify_ui)
+                    if not _show_shared_notification(text_line, cfg_raw):
+                        log_message("Notification overlay unavailable (PySide6 missing)")
             except queue.Empty:
                 pass
             finally:
                 notify_state["in_notify"] = False
-            if notify_ui and (not debug_ui):
-                try:
-                    notify_ui.app.processEvents()
-                except Exception:
-                    pass
             time.sleep(0.1)
     except KeyboardInterrupt:
         stop_event.set()
