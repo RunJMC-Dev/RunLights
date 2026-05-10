@@ -389,6 +389,9 @@ def _run_debug_window(
             notif_btn = QtWidgets.QPushButton("Notification")
             notif_btn.clicked.connect(lambda _=None: self._show_notification_config_dialog())
             sidebar_layout.addWidget(notif_btn)
+            overlays_btn = QtWidgets.QPushButton("Overlays")
+            overlays_btn.clicked.connect(lambda _=None: self._show_overlay_config_dialog())
+            sidebar_layout.addWidget(overlays_btn)
             restart_btn = QtWidgets.QPushButton("Restart")
             restart_btn.clicked.connect(lambda _=None: _restart_runlights_from_debug(self))
             sidebar_layout.addWidget(restart_btn)
@@ -1954,6 +1957,130 @@ def _run_debug_window(
 
             dialog.exec()
 
+        def _show_overlay_config_dialog(self):
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Overlay Config")
+            dialog.setModal(True)
+            dialog.setMinimumWidth(520)
+
+            outer = QtWidgets.QVBoxLayout(dialog)
+
+            type_row = QtWidgets.QHBoxLayout()
+            type_label = QtWidgets.QLabel("Type")
+            type_combo = QtWidgets.QComboBox()
+            type_combo.addItems(["clock"])
+            type_row.addWidget(type_label)
+            type_row.addWidget(type_combo)
+            type_row.addStretch(1)
+            outer.addLayout(type_row)
+
+            clock_widget = QtWidgets.QWidget()
+            clock_form = QtWidgets.QFormLayout(clock_widget)
+            clock_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+            current = {}
+            if cfg_raw_global:
+                current = (cfg_raw_global.get("overlays") or {}).get("clock") or {}
+
+            def _int_val(value, default):
+                try:
+                    return int(float(value))
+                except Exception:
+                    return default
+
+            enabled_cb = QtWidgets.QCheckBox("Show overlay at startup")
+            enabled_cb.setChecked(bool(current.get("enabled", False)))
+
+            fmt = QtWidgets.QLineEdit(str(current.get("format", "%H:%M:%S")).strip() or "%H:%M:%S")
+            fmt.setPlaceholderText("%H:%M:%S")
+
+            font = QtWidgets.QFontComboBox()
+            font.setEditable(False)
+            font_current = str(current.get("font", "")).strip()
+            if font_current:
+                font.setCurrentFont(QtGui.QFont(font_current))
+            fontsize = QtWidgets.QSpinBox()
+            fontsize.setRange(8, 96)
+            fontsize.setValue(_int_val(current.get("fontsize", 24), 24))
+
+            fontcolour = QtWidgets.QLineEdit(str(current.get("fontcolour", "#FFFFFF")).strip() or "#FFFFFF")
+
+            padding = QtWidgets.QSpinBox()
+            padding.setRange(0, 40)
+            padding.setValue(_int_val(current.get("padding", 8), 8))
+
+            bodycolour = QtWidgets.QLineEdit(str(current.get("bodycolour", "#000000")).strip() or "#000000")
+            bodyopacity = QtWidgets.QSpinBox()
+            bodyopacity.setRange(0, 100)
+            bodyopacity.setValue(_int_val(current.get("bodyopacity", 60), 60))
+
+            border = QtWidgets.QSpinBox()
+            border.setRange(0, 10)
+            border.setValue(_int_val(current.get("border", 0), 0))
+
+            align = QtWidgets.QComboBox()
+            align.addItems(["topright", "topcenter", "topleft", "bottomright", "bottomcenter", "bottomleft"])
+            align_val = str(current.get("align", "topright")).strip().lower() or "topright"
+            idx = align.findText(align_val, QtCore.Qt.MatchFixedString)
+            align.setCurrentIndex(idx if idx >= 0 else 0)
+
+            clock_form.addRow("", enabled_cb)
+            clock_form.addRow("Format", fmt)
+            clock_form.addRow("Font", font)
+            clock_form.addRow("Font size", fontsize)
+            clock_form.addRow("Font colour", fontcolour)
+            clock_form.addRow("Padding", padding)
+            clock_form.addRow("Body colour", bodycolour)
+            clock_form.addRow("Body opacity", bodyopacity)
+            clock_form.addRow("Border", border)
+            clock_form.addRow("Align", align)
+            outer.addWidget(clock_widget)
+
+            btn_row = QtWidgets.QHBoxLayout()
+            preview_btn = QtWidgets.QPushButton("Preview")
+            save_btn = QtWidgets.QPushButton("Save")
+            cancel_btn = QtWidgets.QPushButton("Cancel")
+            btn_row.addWidget(preview_btn)
+            btn_row.addStretch(1)
+            btn_row.addWidget(save_btn)
+            btn_row.addWidget(cancel_btn)
+            outer.addLayout(btn_row)
+
+            def _collect():
+                return {
+                    "enabled": bool(enabled_cb.isChecked()),
+                    "format": fmt.text().strip() or "%H:%M:%S",
+                    "font": font.currentFont().family().strip(),
+                    "fontsize": fontsize.value(),
+                    "fontcolour": fontcolour.text().strip() or "#FFFFFF",
+                    "padding": padding.value(),
+                    "bodycolour": bodycolour.text().strip() or "#000000",
+                    "bodyopacity": bodyopacity.value(),
+                    "border": border.value(),
+                    "align": align.currentText().strip() or "topright",
+                }
+
+            def _on_preview():
+                s = _collect()
+                preview_cfg = dict(cfg_raw_global or {})
+                preview_cfg["overlays"] = {**(preview_cfg.get("overlays") or {}), "clock": {**s, "enabled": True}}
+                _apply_clock_overlay_config(preview_cfg)
+
+            def _on_save():
+                settings = _collect()
+                ok = _upsert_clock_overlay_in_config(CONFIG_PATH, settings, self.append_line)
+                if ok:
+                    self.append_line("Saved overlay settings to config.toml")
+                    new_cfg = _reload_config(self.append_line)
+                    _apply_clock_overlay_config(new_cfg if new_cfg else cfg_raw_global)
+                dialog.accept()
+
+            preview_btn.clicked.connect(lambda _=None: _on_preview())
+            save_btn.clicked.connect(lambda _=None: _on_save())
+            cancel_btn.clicked.connect(lambda _=None: dialog.reject())
+
+            dialog.exec()
+
         def _set_debug_filters(self, *, output: bool | None = None, input: bool | None = None):
             if output is not None:
                 self._show_output_logs = bool(output)
@@ -2401,6 +2528,180 @@ def _show_shared_notification(
     return True
 
 
+class _ClockOverlayState:
+    def __init__(self, app, widget):
+        self.app = app
+        self.widget = widget
+
+
+_CLOCK_OVERLAY_STATE: _ClockOverlayState | None = None
+
+
+def _read_clock_overlay_config(cfg_raw: dict | None) -> dict:
+    def _int_val(value, default):
+        try:
+            return int(float(value))
+        except Exception:
+            return default
+
+    cfg = {}
+    if cfg_raw:
+        cfg = (cfg_raw.get("overlays") or {}).get("clock") or {}
+
+    body_opacity = max(0, min(100, _int_val(cfg.get("bodyopacity", 60), 60)))
+    body_color_hex = str(cfg.get("bodycolour", "#000000")).strip() or "#000000"
+    try:
+        body_color = wled._hex_to_rgb(body_color_hex)
+    except Exception:
+        body_color = (0, 0, 0)
+    return {
+        "enabled": bool(cfg.get("enabled", False)),
+        "format": str(cfg.get("format", "%H:%M:%S")).strip() or "%H:%M:%S",
+        "font_family": str(cfg.get("font", "")).strip() or None,
+        "font_size": _int_val(cfg.get("fontsize", 24), 24),
+        "font_color": str(cfg.get("fontcolour", "#FFFFFF")).strip() or "#FFFFFF",
+        "padding": _int_val(cfg.get("padding", 8), 8),
+        "body_color": body_color,
+        "body_alpha": int(round(255 * (body_opacity / 100.0))),
+        "border": _int_val(cfg.get("border", 0), 0),
+        "align": str(cfg.get("align", "topright")).strip().lower() or "topright",
+    }
+
+
+def _ensure_clock_overlay() -> _ClockOverlayState | None:
+    try:
+        from PySide6 import QtCore, QtGui, QtWidgets
+        from datetime import datetime as _dt
+    except Exception:
+        return None
+
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        app = QtWidgets.QApplication([])
+
+    class ClockOverlay(QtWidgets.QWidget):
+        def __init__(self):
+            super().__init__()
+            self.setWindowFlags(
+                QtCore.Qt.FramelessWindowHint
+                | QtCore.Qt.WindowStaysOnTopHint
+                | QtCore.Qt.Window
+                | QtCore.Qt.ToolTip
+            )
+            self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+            self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+            self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
+            self.setFocusPolicy(QtCore.Qt.NoFocus)
+
+            layout = QtWidgets.QHBoxLayout(self)
+            layout.setContentsMargins(0, 0, 0, 0)
+            self.label = QtWidgets.QLabel(self)
+            self._base_font = self.label.font()
+            self._base_font.setBold(True)
+            self.label.setFont(self._base_font)
+            layout.addWidget(self.label)
+
+            self._fmt = "%H:%M:%S"
+            self._tick_timer = QtCore.QTimer(self)
+            self._tick_timer.setInterval(1000)
+            self._tick_timer.timeout.connect(self._tick)
+
+        def _tick(self):
+            self.label.setText(_dt.now().strftime(self._fmt))
+            self.label.adjustSize()
+            self.adjustSize()
+
+        def apply_style(self, *, font_family, font_size, font_color, body_color, body_alpha, padding, border):
+            font = QtGui.QFont(self._base_font)
+            if font_family:
+                font.setFamily(font_family)
+            font.setPointSize(max(8, int(font_size)))
+            self.label.setFont(font)
+            border_css = "none" if border <= 0 else f"{border}px solid rgba(200,200,200,160)"
+            self.label.setStyleSheet(
+                "color: {fc}; background: rgba({r},{g},{b},{a});"
+                "border: {border}; padding: {padding}px; border-radius: 6px;".format(
+                    fc=font_color,
+                    r=body_color[0], g=body_color[1], b=body_color[2], a=body_alpha,
+                    border=border_css,
+                    padding=max(0, int(padding)),
+                )
+            )
+
+        def position_on_screen(self, align: str):
+            _app = QtWidgets.QApplication.instance()
+            screen = _app.primaryScreen() if _app else None
+            if screen is None and _app:
+                screens = _app.screens()
+                if screens:
+                    screen = screens[0]
+            if not screen:
+                return
+            geo = screen.availableGeometry()
+            self.adjustSize()
+            ow, oh = self.width(), self.height()
+            margin = 24
+            if align in ("topleft", "top-left", "top_start", "topstart"):
+                x, y = geo.x() + margin, geo.y() + margin
+            elif align in ("topcenter", "top-center", "top_center"):
+                x, y = geo.x() + (geo.width() - ow) // 2, geo.y() + margin
+            elif align in ("topright", "top-right", "top_end", "topend"):
+                x, y = geo.x() + geo.width() - ow - margin, geo.y() + margin
+            elif align in ("bottomleft", "bottom-left", "bottom_start"):
+                x, y = geo.x() + margin, geo.y() + geo.height() - oh - margin
+            elif align in ("bottomcenter", "bottom-center", "bottom_center"):
+                x, y = geo.x() + (geo.width() - ow) // 2, geo.y() + geo.height() - oh - margin
+            elif align in ("bottomright", "bottom-right", "bottom_end"):
+                x, y = geo.x() + geo.width() - ow - margin, geo.y() + geo.height() - oh - margin
+            else:
+                x, y = geo.x() + geo.width() - ow - margin, geo.y() + margin
+            self.move(x, y)
+
+        def start_clock(self, settings: dict):
+            self._fmt = settings.get("format", "%H:%M:%S") or "%H:%M:%S"
+            self.apply_style(
+                font_family=settings.get("font_family"),
+                font_size=settings.get("font_size", 24),
+                font_color=settings.get("font_color", "#FFFFFF"),
+                body_color=settings.get("body_color", (0, 0, 0)),
+                body_alpha=settings.get("body_alpha", 153),
+                padding=settings.get("padding", 8),
+                border=settings.get("border", 0),
+            )
+            self._tick()
+            self.position_on_screen(settings.get("align", "topright"))
+            self._tick_timer.start()
+            self.show()
+            self.raise_()
+
+        def stop_clock(self):
+            self._tick_timer.stop()
+            self.hide()
+
+    widget = ClockOverlay()
+    return _ClockOverlayState(app, widget)
+
+
+def _apply_clock_overlay_config(cfg_raw: dict | None):
+    global _CLOCK_OVERLAY_STATE
+    settings = _read_clock_overlay_config(cfg_raw)
+    if not settings["enabled"]:
+        if _CLOCK_OVERLAY_STATE is not None:
+            try:
+                _CLOCK_OVERLAY_STATE.widget.stop_clock()
+            except Exception:
+                pass
+        return
+    if _CLOCK_OVERLAY_STATE is None:
+        _CLOCK_OVERLAY_STATE = _ensure_clock_overlay()
+    if _CLOCK_OVERLAY_STATE is None:
+        return
+    try:
+        _CLOCK_OVERLAY_STATE.widget.start_clock(settings)
+    except Exception:
+        pass
+
+
 def _start_mqtt_listener(
     cfg_raw: dict,
     stop_event: threading.Event,
@@ -2661,6 +2962,59 @@ def _upsert_debug_window_in_config(config_path: Path, settings: dict, log_messag
                 insert_idx = idx
                 break
         block_lines = _render_debug_window_block(settings)
+        if insert_idx == 0 and block_lines and block_lines[0] == "":
+            block_lines = block_lines[1:]
+        lines[insert_idx:insert_idx] = block_lines
+        out = "\n".join(lines)
+        if raw.endswith("\n"):
+            out += "\n"
+        config_path.write_text(out, encoding="utf-8")
+        return True
+    except Exception as exc:
+        log_message(f"Failed to write config: {exc}")
+        return False
+
+
+def _render_overlays_clock_block(settings: dict) -> list[str]:
+    def _int_val(value, default):
+        try:
+            return int(float(value))
+        except Exception:
+            return default
+
+    lines = ["", "[overlays.clock]"]
+    lines.append(f"enabled = {str(bool(settings.get('enabled', False))).lower()}")
+    lines.append(f"format = \"{_toml_escape(str(settings.get('format', '%H:%M:%S')).strip() or '%H:%M:%S')}\"")
+    lines.append(f"font = \"{_toml_escape(str(settings.get('font', '')).strip())}\"")
+    lines.append(f"fontsize = {_int_val(settings.get('fontsize', 24), 24)}")
+    lines.append(f"fontcolour = \"{_toml_escape(str(settings.get('fontcolour', '#FFFFFF')).strip() or '#FFFFFF')}\"")
+    lines.append(f"padding = {_int_val(settings.get('padding', 8), 8)}")
+    lines.append(f"bodycolour = \"{_toml_escape(str(settings.get('bodycolour', '#000000')).strip() or '#000000')}\"")
+    lines.append(f"bodyopacity = {_int_val(settings.get('bodyopacity', 60), 60)}")
+    lines.append(f"border = {_int_val(settings.get('border', 0), 0)}")
+    lines.append(f"align = \"{_toml_escape(str(settings.get('align', 'topright')).strip() or 'topright')}\"")
+    lines.append("")
+    return lines
+
+
+def _upsert_clock_overlay_in_config(config_path: Path, settings: dict, log_message) -> bool:
+    if not config_path.exists():
+        log_message(f"Config file not found: {config_path}")
+        return False
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+        lines = raw.splitlines()
+        found = _find_table_block(lines, "overlays.clock")
+        if found:
+            start, end = found
+            del lines[start:end]
+        insert_idx = len(lines)
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("[") and line.lstrip() == line:
+                insert_idx = idx
+                break
+        block_lines = _render_overlays_clock_block(settings)
         if insert_idx == 0 and block_lines and block_lines[0] == "":
             block_lines = block_lines[1:]
         lines[insert_idx:insert_idx] = block_lines
@@ -3993,6 +4347,7 @@ def main() -> int:
         _apply_idle_preset(cfg_raw, log_message)
         if cfg_raw.get("idle"):
             _apply_idle(cfg_raw, log_message)
+        _apply_clock_overlay_config(cfg_raw)
 
     # Single instance guard: if pipe already exists, exit.
     try:
@@ -4080,9 +4435,14 @@ def main() -> int:
                 pass
             finally:
                 notify_state["in_notify"] = False
+            _qt_app = None
             if _NOTIFY_UI_STATE is not None:
+                _qt_app = _NOTIFY_UI_STATE.app
+            elif _CLOCK_OVERLAY_STATE is not None:
+                _qt_app = _CLOCK_OVERLAY_STATE.app
+            if _qt_app is not None:
                 try:
-                    _NOTIFY_UI_STATE.app.processEvents()
+                    _qt_app.processEvents()
                 except Exception:
                     pass
             time.sleep(0.1)

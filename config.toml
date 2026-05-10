@@ -75,6 +75,18 @@ output = true
 input = true
 log_to_notifications = false
 
+[overlays.clock]
+enabled = false
+format = "%H:%M:%S"
+font = "Alegreya Sans SC"
+fontsize = 28
+fontcolour = "#FFFFFF"
+padding = 10
+bodycolour = "#000000"
+bodyopacity = 60
+border = 0
+align = "topright"
+
 [mqtt]
 host = "192.168.20.80"
 port = 1883
