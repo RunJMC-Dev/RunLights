@@ -189,6 +189,45 @@ def _windows_accent_color() -> tuple[int, int, int] | None:
         return None
 
 
+_STARTUP_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_STARTUP_REG_NAME = "RunLights"
+
+
+def _get_startup_enabled() -> bool:
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_REG_KEY) as key:
+            winreg.QueryValueEx(key, _STARTUP_REG_NAME)
+            return True
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return False
+
+
+def _set_startup_enabled(enabled: bool) -> bool:
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, _STARTUP_REG_KEY, 0, winreg.KEY_SET_VALUE
+        ) as key:
+            if enabled:
+                exe = Path(sys.executable)
+                # Prefer pythonw.exe (no console window) if available alongside python.exe
+                pythonw = exe.parent / "pythonw.exe"
+                launch_exe = str(pythonw) if pythonw.exists() else str(exe)
+                cmd = f'"{launch_exe}" "{_here / "runlights.pyw"}"'
+                winreg.SetValueEx(key, _STARTUP_REG_NAME, 0, winreg.REG_SZ, cmd)
+            else:
+                try:
+                    winreg.DeleteValue(key, _STARTUP_REG_NAME)
+                except FileNotFoundError:
+                    pass
+        return True
+    except Exception:
+        return False
+
+
 def _apply_dark_palette(app):
     """Apply a dark Fusion palette, picking up Windows accent if available."""
     from PySide6 import QtGui, QtWidgets
@@ -392,6 +431,9 @@ def _run_debug_window(
             overlays_btn = QtWidgets.QPushButton("Overlays")
             overlays_btn.clicked.connect(lambda _=None: self._show_overlay_config_dialog())
             sidebar_layout.addWidget(overlays_btn)
+            settings_btn = QtWidgets.QPushButton("Settings")
+            settings_btn.clicked.connect(lambda _=None: self._show_settings_dialog())
+            sidebar_layout.addWidget(settings_btn)
             restart_btn = QtWidgets.QPushButton("Restart")
             restart_btn.clicked.connect(lambda _=None: _restart_runlights_from_debug(self))
             sidebar_layout.addWidget(restart_btn)
@@ -2076,6 +2118,42 @@ def _run_debug_window(
                 dialog.accept()
 
             preview_btn.clicked.connect(lambda _=None: _on_preview())
+            save_btn.clicked.connect(lambda _=None: _on_save())
+            cancel_btn.clicked.connect(lambda _=None: dialog.reject())
+
+            dialog.exec()
+
+        def _show_settings_dialog(self):
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Settings")
+            dialog.setModal(True)
+            dialog.setMinimumWidth(320)
+
+            form = QtWidgets.QFormLayout(dialog)
+            form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+
+            startup_cb = QtWidgets.QCheckBox("Launch RunLights when Windows starts")
+            startup_cb.setChecked(_get_startup_enabled())
+            form.addRow("Startup", startup_cb)
+
+            btn_row = QtWidgets.QHBoxLayout()
+            save_btn = QtWidgets.QPushButton("Save")
+            cancel_btn = QtWidgets.QPushButton("Cancel")
+            btn_row.addStretch(1)
+            btn_row.addWidget(save_btn)
+            btn_row.addWidget(cancel_btn)
+            form.addRow(btn_row)
+
+            def _on_save():
+                enabled = startup_cb.isChecked()
+                ok = _set_startup_enabled(enabled)
+                if ok:
+                    state = "enabled" if enabled else "disabled"
+                    self.append_line(f"Start on boot {state}")
+                else:
+                    self.append_line("Failed to update startup registry key")
+                dialog.accept()
+
             save_btn.clicked.connect(lambda _=None: _on_save())
             cancel_btn.clicked.connect(lambda _=None: dialog.reject())
 
