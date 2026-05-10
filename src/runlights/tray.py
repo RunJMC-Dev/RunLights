@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 from queue import Queue
+from datetime import datetime
 
 try:
     import win32file
@@ -152,9 +153,10 @@ def _send_with_log(pipe_handle, payload: Dict[str, Any], log_queue: Optional[Que
     if log_queue is None:
         return
     try:
+        ts = datetime.now().strftime("%H:%M:%S")
         if raw is not None:
-            log_queue.put(f"CLI recv: {raw}")
-        log_queue.put(f"CLI send: {payload}")
+            log_queue.put(f"[{ts}] CLI recv: {raw}")
+        log_queue.put(f"[{ts}] CLI send: {payload}")
     except Exception:
         pass
 

@@ -20,6 +20,51 @@ CONFIG_PATH = _here / "config.toml"
 os.chdir(_here)
 sys.path.insert(0, str(_here / "src"))
 
+_STARTUP_LOG = _here / "runlights_startup.log"
+
+
+def _excepthook(exc_type, exc_val, exc_tb):
+    import traceback
+    text = "".join(traceback.format_exception(exc_type, exc_val, exc_tb))
+    try:
+        _STARTUP_LOG.write_text(text, encoding="utf-8")
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.MessageBoxW(None, str(exc_val), "RunLights startup error", 0x10)
+    except Exception:
+        pass
+
+
+sys.excepthook = _excepthook
+
+
+def _check_dependencies() -> None:
+    checks = [
+        ("win32file", "pywin32"),
+        ("pystray", "pystray"),
+        ("PIL", "Pillow"),
+        ("PySide6", "PySide6"),
+        ("pytesseract", "pytesseract"),
+        ("psutil", "psutil"),
+        ("requests", "requests"),
+        ("paho.mqtt", "paho-mqtt"),
+    ]
+    missing = []
+    for module, package in checks:
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(package)
+    if missing:
+        names = "\n".join(f"  {p}" for p in missing)
+        msg = f"Missing dependencies:\n\n{names}\n\nRun setup.bat to install them."
+        ctypes.windll.user32.MessageBoxW(None, msg, "RunLights — Missing Dependencies", 0x10)
+        sys.exit(1)
+
+
+_check_dependencies()
+
 PAUSE_EVENT = threading.Event()
 CURRENT_APP_ID: str | None = None
 DEBUG_WINDOW_SETTINGS = {"output": True, "input": True, "log_to_notifications": False}
@@ -62,6 +107,7 @@ def _show_message_box(title: str, message: str) -> None:
 def start_tray_icon(stop_event: threading.Event, debug_request: threading.Event) -> pystray.Icon | None:
     if pystray is None:
         logging.warning("pystray/Pillow not installed; tray icon disabled")
+        _show_message_box("RunLights", "pystray or Pillow is not installed — tray icon disabled.\nSee runlights_startup.log.")
         return None
 
     icon_image = _load_icon_image()
@@ -3876,6 +3922,11 @@ def _ocr_poll_loop(
 def main() -> int:
     # Keep console logging minimal; main logging goes to the debug window queue.
     logging.basicConfig(level=logging.ERROR)
+    _log_file = None
+    try:
+        _log_file = open(_STARTUP_LOG, "w", encoding="utf-8", buffering=1)
+    except Exception:
+        pass
     stop_event = threading.Event()
     debug_request = threading.Event()
     log_queue: "queue.Queue[dict]" = queue.Queue()
@@ -3893,6 +3944,11 @@ def main() -> int:
     def log_message(msg: str, msg_id: str | None = None, msg_class: str | None = None):
         entry = _build_log_entry(msg, msg_id=msg_id, msg_class=msg_class)
         log_buffer.append(entry)
+        if _log_file is not None:
+            try:
+                _log_file.write(f"[{entry['ts']}] {msg}\n")
+            except Exception:
+                pass
         try:
             log_queue.put(entry)
         except Exception:
@@ -3911,6 +3967,12 @@ def main() -> int:
                     notify_queue.put(entry)
                 except Exception:
                     pass
+    log_message(f"RunLights starting — Python {sys.version.split()[0]}")
+    log_message(
+        f"pystray={'ok' if pystray is not None else 'MISSING'}"
+        f"  pytesseract={'ok' if pytesseract is not None else 'missing'}"
+        f"  psutil={'ok' if psutil is not None else 'missing'}"
+    )
     # Log config load once at startup.
     debug_on_start = False
     try:
@@ -4037,6 +4099,11 @@ def main() -> int:
             pass
     if cfg_raw is not None:
         _apply_idle_preset(cfg_raw, log_message)
+    if _log_file is not None:
+        try:
+            _log_file.close()
+        except Exception:
+            pass
     return 0
 
 

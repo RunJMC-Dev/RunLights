@@ -118,6 +118,90 @@ def send_simple(
     return send_state(ctrl, payload, timeout=timeout)
 
 
+def fetch_state(controller: WLEDController, timeout: float = 2.0) -> dict:
+    """Return the current state payload."""
+    url = f"http://{controller.host}:{controller.port}/json/state"
+    try:
+        resp = requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise WLEDError("Unexpected state payload")
+        return data
+    except Exception as exc:
+        raise WLEDError(f"WLED state fetch failed: {exc}") from exc
+
+
+def current_preset_id(controller: WLEDController, timeout: float = 2.0) -> Optional[int]:
+    """Return the current preset id (ps) if available."""
+    state = fetch_state(controller, timeout=timeout)
+    pid = state.get("ps")
+    try:
+        pid_int = int(pid)
+    except Exception:
+        return None
+    if pid_int < 0:
+        return None
+    return pid_int
+
+
+def fetch_presets(controller: WLEDController, timeout: float = 2.0) -> dict:
+    """Return the preset dictionary from /presets.json."""
+    url = f"http://{controller.host}:{controller.port}/presets.json"
+    try:
+        resp = requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, dict):
+            raise WLEDError("Unexpected presets payload")
+        return data
+    except Exception as exc:
+        raise WLEDError(f"WLED presets fetch failed: {exc}") from exc
+
+
+def resolve_preset_id(controller: WLEDController, preset: str | int, timeout: float = 2.0) -> int:
+    """
+    Resolve a preset name or id to an integer id.
+    - If preset is numeric (or numeric string), use it directly.
+    - Otherwise, fetch presets.json and match by name case-insensitively.
+    """
+    if isinstance(preset, (int, float)) or (isinstance(preset, str) and preset.isdigit()):
+        return int(preset)
+
+    presets = fetch_presets(controller, timeout=timeout)
+    target = str(preset).strip().lower()
+    for pid, pdata in presets.items():
+        name = ""
+        if isinstance(pdata, dict):
+            name = str(pdata.get("n", "")).lower()
+        if name == target:
+            try:
+                return int(pid)
+            except Exception:
+                break
+    raise WLEDError(f"Preset '{preset}' not found on {controller.host}")
+
+
+def apply_preset(
+    controller: WLEDController,
+    preset: str | int,
+    transition_ms: Optional[int] = None,
+    timeout: float = 2.0,
+) -> dict:
+    """Apply a preset by id or name."""
+    preset_id = resolve_preset_id(controller, preset, timeout=timeout)
+    body: dict = {"ps": preset_id}
+    if transition_ms is not None:
+        body["tt"] = max(0, int(round(float(transition_ms) / 100.0)))
+    url = f"http://{controller.host}:{controller.port}/json/state"
+    try:
+        resp = requests.post(url, json=body, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json() if resp.content else {}
+    except Exception as exc:
+        raise WLEDError(f"WLED preset apply failed: {exc}") from exc
+
+
 def apply_fullfade(
     host: str,
     port: int,
@@ -134,11 +218,12 @@ def apply_fullfade(
     - color is applied as the primary color; no segments specified (whole strip).
     """
     pct = max(0.0, min(100.0, float(health_pct)))
-    bri = int(255 * (pct / 100.0))
+    bri = int(round(255 * (pct / 100.0)))
+    on_flag = pct > 0
     return send_simple(
         host=host,
         port=port,
-        on=True,
+        on=on_flag,
         brightness=bri,
         color=color_hex,
         segment=None,
