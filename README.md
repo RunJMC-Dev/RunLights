@@ -95,6 +95,8 @@ Outputs
 - Minimal standalone helper: `python standalone_cli.py <console>` (or place alongside ES-DE scripts; it reads `argv[3]` too). It sends the console name over the named pipe; if the tray isn’t running it no-ops without crashing ES-DE.
 - Restart tray: `python standalone_cli.py restart` (best-effort; requires `psutil` to target the correct process).
 - Only `/scripts/game-select` is needed; process detection handles startup/quit.
+- On Windows, use a small `game-select.bat` in the ES-DE event folder that launches a `.pyw` helper with `%*`. This preserves ES-DE's event arguments while avoiding a visible Python console window. Keep the `.pyw` helper outside the event folder itself (for example in a `helpers` subfolder) so ES-DE does not launch it directly without arguments.
+- The live helper writes diagnostics to `D:\Emulators\EmulationStation\ES-DE\scripts\game-select\helpers\runlights-game-select.log`; if a shelf does not light up, check whether ES-DE passed a blank system name or a name that is missing from `config.toml` bindings.
 
 ## Debug window commands
 - `showapplications` / `showcontrollers`
