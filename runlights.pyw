@@ -2724,14 +2724,14 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
 
         def _tick(self):
             lines = [_dt.now().strftime(self._fmt)]
+            if self._timer_deadline is not None:
+                lines[0] = f"{lines[0]}  ⏰"
             if self._show_playtime:
                 play_time = _format_play_time(CURRENT_APP_STARTED_AT)
                 if play_time:
                     label = self._playtime_label.strip()
                     lines.append(f"{label} {play_time}" if label else play_time)
-            timer_text = self._timer_text()
-            if timer_text:
-                lines.append(timer_text)
+            self._update_timer_state()
             if self._timer_expired:
                 self._timer_flash_on = not self._timer_flash_on
                 self._apply_label_style(flash_red=self._timer_flash_on)
@@ -2742,18 +2742,11 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             self.adjustSize()
             self.position_on_screen(self._align)
 
-        def _timer_text(self) -> str | None:
+        def _update_timer_state(self):
             if self._timer_deadline is None:
-                return None
-            remaining = int(round(self._timer_deadline - time.monotonic()))
-            if remaining <= 0:
+                return
+            if time.monotonic() >= self._timer_deadline:
                 self._timer_expired = True
-                return "Timer done"
-            minutes, seconds = divmod(remaining, 60)
-            hours, minutes = divmod(minutes, 60)
-            if hours:
-                return f"Timer {hours:d}:{minutes:02d}:{seconds:02d}"
-            return f"Timer {minutes:02d}:{seconds:02d}"
 
         def _set_timer(self, minutes: int):
             self._timer_deadline = time.monotonic() + max(1, int(minutes)) * 60
