@@ -111,7 +111,7 @@ Outputs
 - `appconfig`: opens a dialog to add/configure an `[[application]]` entry (includes a process picker and optional input/output mode settings).
 - `notification`: use the Debug window sidebar button to edit notify overlay settings (includes a test button and font picker).
 - `settings`: use the Debug window sidebar **Settings** button to toggle **Start on Boot** (writes/removes a registry entry under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`).
-- Clock overlay: right-click the clock to add a 15 minute, 30 minute, or 1 hour countdown timer. A small alarm icon appears beside the clock while a timer is running; when it ends, the clock overlay flashes red until the timer is cancelled or replaced.
+- Clock overlay: right-click the clock to add a 15 minute, 30 minute, or 1 hour countdown timer. A small alarm icon appears beside the clock while a timer is running, hover shows the time left, and left-click drag moves the overlay for the current session. When the timer ends, the clock overlay flashes red until the timer is cancelled or replaced.
 - Debug window checkbox "Output log to on screen notifications." mirrors log lines through the shared on-screen notification overlay.
 - Debug window sidebar includes "Debug Messages" Output/Input filters to hide those log lines.
 - `reloadconfig`: reload config.toml (threads keep old config).

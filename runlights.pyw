@@ -2718,6 +2718,9 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             self._body_alpha = 153
             self._padding = 8
             self._border = 0
+            self._drag_offset = None
+            self._manual_position = False
+            self.label.installEventFilter(self)
             self._tick_timer = QtCore.QTimer(self)
             self._tick_timer.setInterval(1000)
             self._tick_timer.timeout.connect(self._tick)
@@ -2738,15 +2741,34 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             else:
                 self._apply_label_style(flash_red=False)
             self.label.setText("\n".join(lines))
+            self._update_tooltip()
             self.label.adjustSize()
             self.adjustSize()
-            self.position_on_screen(self._align)
+            if not self._manual_position:
+                self.position_on_screen(self._align)
 
         def _update_timer_state(self):
             if self._timer_deadline is None:
                 return
             if time.monotonic() >= self._timer_deadline:
                 self._timer_expired = True
+
+        def _timer_remaining_text(self) -> str | None:
+            if self._timer_deadline is None:
+                return None
+            if self._timer_expired:
+                return "Timer done"
+            remaining = max(0, int(round(self._timer_deadline - time.monotonic())))
+            minutes, seconds = divmod(remaining, 60)
+            hours, minutes = divmod(minutes, 60)
+            if hours:
+                return f"Timer left: {hours:d}:{minutes:02d}:{seconds:02d}"
+            return f"Timer left: {minutes:02d}:{seconds:02d}"
+
+        def _update_tooltip(self):
+            text = self._timer_remaining_text() or ""
+            self.setToolTip(text)
+            self.label.setToolTip(text)
 
         def _set_timer(self, minutes: int):
             self._timer_deadline = time.monotonic() + max(1, int(minutes)) * 60
@@ -2759,6 +2781,30 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             self._timer_expired = False
             self._timer_flash_on = False
             self._tick()
+
+        def _event_global_pos(self, event):
+            try:
+                return event.globalPosition().toPoint()
+            except Exception:
+                return event.globalPos()
+
+        def eventFilter(self, watched, event):  # type: ignore[override]
+            if watched is self.label:
+                event_type = event.type()
+                if event_type == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.LeftButton:
+                    self._drag_offset = self._event_global_pos(event) - self.frameGeometry().topLeft()
+                    event.accept()
+                    return True
+                if event_type == QtCore.QEvent.MouseMove and self._drag_offset is not None:
+                    self._manual_position = True
+                    self.move(self._event_global_pos(event) - self._drag_offset)
+                    event.accept()
+                    return True
+                if event_type == QtCore.QEvent.MouseButtonRelease and event.button() == QtCore.Qt.LeftButton:
+                    self._drag_offset = None
+                    event.accept()
+                    return True
+            return super().eventFilter(watched, event)
 
         def _show_context_menu(self, pos):
             self._show_context_menu_at(self.mapToGlobal(pos))
