@@ -24,6 +24,20 @@ border = 0
 timestamp = true
 align = "topcenter"
 
+[overlays.clock]
+enabled = true
+format = "%H:%M:%S"
+show_playtime = true
+playtime_label = "Play"
+font = "Tahoma"
+fontsize = 24
+fontcolour = "#FFFFFF"
+padding = 8
+bodycolour = "#000000"
+bodyopacity = 60
+border = 0
+align = "topright"
+
 [mqtt]
 host = "192.168.20.80"
 port = 1883

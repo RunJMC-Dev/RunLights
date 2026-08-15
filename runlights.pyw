@@ -67,6 +67,7 @@ _check_dependencies()
 
 PAUSE_EVENT = threading.Event()
 CURRENT_APP_ID: str | None = None
+CURRENT_APP_STARTED_AT: float | None = None
 DEBUG_WINDOW_SETTINGS = {"output": True, "input": True, "log_to_notifications": False}
 
 from runlights.tray import serve_in_thread  # noqa: E402
@@ -2036,6 +2037,12 @@ def _run_debug_window(
             fmt = QtWidgets.QLineEdit(str(current.get("format", "%H:%M:%S")).strip() or "%H:%M:%S")
             fmt.setPlaceholderText("%H:%M:%S")
 
+            show_playtime = QtWidgets.QCheckBox("Show play time while an app is active")
+            show_playtime.setChecked(bool(current.get("show_playtime", True)))
+
+            playtime_label = QtWidgets.QLineEdit(str(current.get("playtime_label", "Play")).strip())
+            playtime_label.setPlaceholderText("Play")
+
             font = QtWidgets.QFontComboBox()
             font.setEditable(False)
             font_current = str(current.get("font", "")).strip()
@@ -2068,6 +2075,8 @@ def _run_debug_window(
 
             clock_form.addRow("", enabled_cb)
             clock_form.addRow("Format", fmt)
+            clock_form.addRow("", show_playtime)
+            clock_form.addRow("Play time label", playtime_label)
             clock_form.addRow("Font", font)
             clock_form.addRow("Font size", fontsize)
             clock_form.addRow("Font colour", fontcolour)
@@ -2092,6 +2101,8 @@ def _run_debug_window(
                 return {
                     "enabled": bool(enabled_cb.isChecked()),
                     "format": fmt.text().strip() or "%H:%M:%S",
+                    "show_playtime": bool(show_playtime.isChecked()),
+                    "playtime_label": playtime_label.text().strip(),
                     "font": font.currentFont().family().strip(),
                     "fontsize": fontsize.value(),
                     "fontcolour": fontcolour.text().strip() or "#FFFFFF",
@@ -2635,6 +2646,8 @@ def _read_clock_overlay_config(cfg_raw: dict | None) -> dict:
     return {
         "enabled": bool(cfg.get("enabled", False)),
         "format": str(cfg.get("format", "%H:%M:%S")).strip() or "%H:%M:%S",
+        "show_playtime": bool(cfg.get("show_playtime", True)),
+        "playtime_label": str(cfg.get("playtime_label", "Play")).strip(),
         "font_family": str(cfg.get("font", "")).strip() or None,
         "font_size": _int_val(cfg.get("fontsize", 24), 24),
         "font_color": str(cfg.get("fontcolour", "#FFFFFF")).strip() or "#FFFFFF",
@@ -2644,6 +2657,15 @@ def _read_clock_overlay_config(cfg_raw: dict | None) -> dict:
         "border": _int_val(cfg.get("border", 0), 0),
         "align": str(cfg.get("align", "topright")).strip().lower() or "topright",
     }
+
+
+def _format_play_time(started_at: float | None) -> str | None:
+    if started_at is None:
+        return None
+    elapsed = max(0, int(time.monotonic() - started_at))
+    hours, rem = divmod(elapsed, 3600)
+    minutes, seconds = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def _ensure_clock_overlay() -> _ClockOverlayState | None:
@@ -2680,14 +2702,24 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             layout.addWidget(self.label)
 
             self._fmt = "%H:%M:%S"
+            self._show_playtime = True
+            self._playtime_label = "Play"
+            self._align = "topright"
             self._tick_timer = QtCore.QTimer(self)
             self._tick_timer.setInterval(1000)
             self._tick_timer.timeout.connect(self._tick)
 
         def _tick(self):
-            self.label.setText(_dt.now().strftime(self._fmt))
+            lines = [_dt.now().strftime(self._fmt)]
+            if self._show_playtime:
+                play_time = _format_play_time(CURRENT_APP_STARTED_AT)
+                if play_time:
+                    label = self._playtime_label.strip()
+                    lines.append(f"{label} {play_time}" if label else play_time)
+            self.label.setText("\n".join(lines))
             self.label.adjustSize()
             self.adjustSize()
+            self.position_on_screen(self._align)
 
         def apply_style(self, *, font_family, font_size, font_color, body_color, body_alpha, padding, border):
             font = QtGui.QFont(self._base_font)
@@ -2737,6 +2769,9 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
 
         def start_clock(self, settings: dict):
             self._fmt = settings.get("format", "%H:%M:%S") or "%H:%M:%S"
+            self._show_playtime = bool(settings.get("show_playtime", True))
+            self._playtime_label = str(settings.get("playtime_label", "Play") or "").strip()
+            self._align = settings.get("align", "topright")
             self.apply_style(
                 font_family=settings.get("font_family"),
                 font_size=settings.get("font_size", 24),
@@ -2747,7 +2782,7 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
                 border=settings.get("border", 0),
             )
             self._tick()
-            self.position_on_screen(settings.get("align", "topright"))
+            self.position_on_screen(self._align)
             self._tick_timer.start()
             self.show()
             self.raise_()
@@ -3063,6 +3098,8 @@ def _render_overlays_clock_block(settings: dict) -> list[str]:
     lines = ["", "[overlays.clock]"]
     lines.append(f"enabled = {str(bool(settings.get('enabled', False))).lower()}")
     lines.append(f"format = \"{_toml_escape(str(settings.get('format', '%H:%M:%S')).strip() or '%H:%M:%S')}\"")
+    lines.append(f"show_playtime = {str(bool(settings.get('show_playtime', True))).lower()}")
+    lines.append(f"playtime_label = \"{_toml_escape(str(settings.get('playtime_label', 'Play')).strip())}\"")
     lines.append(f"font = \"{_toml_escape(str(settings.get('font', '')).strip())}\"")
     lines.append(f"fontsize = {_int_val(settings.get('fontsize', 24), 24)}")
     lines.append(f"fontcolour = \"{_toml_escape(str(settings.get('fontcolour', '#FFFFFF')).strip() or '#FFFFFF')}\"")
@@ -3811,7 +3848,7 @@ def _apply_idle(cfg_raw: dict, log_message):
 
 
 def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message):
-    global CURRENT_APP_ID
+    global CURRENT_APP_ID, CURRENT_APP_STARTED_AT
     watch: dict[str, str] = {}
     for app in cfg_raw.get("application", []):
         for name in app.get("processes", []):
@@ -3855,6 +3892,7 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                 if started_apps:
                     active_app = sorted(started_apps)[0]
                     CURRENT_APP_ID = active_app
+                    CURRENT_APP_STARTED_AT = time.monotonic()
                     _apply_gaming_preset(cfg_raw, gaming_preset, log_message)
                     # Apply base output for first mode
                     modes = next((a.get("modes", []) for a in cfg_raw.get("application", []) if a.get("id") == active_app), [])
@@ -3866,6 +3904,7 @@ def _process_watch_loop(cfg_raw: dict, stop_event: threading.Event, log_message)
                     if active_app in stopped_apps or not current:
                         active_app = None
                         CURRENT_APP_ID = None
+                        CURRENT_APP_STARTED_AT = None
                         _apply_idle_preset(cfg_raw, log_message)
                 # Log when the active app becomes the foreground window.
                 if active_app and win32gui and win32process:
