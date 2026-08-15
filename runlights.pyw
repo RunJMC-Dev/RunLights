@@ -2688,10 +2688,11 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
                 | QtCore.Qt.Window
                 | QtCore.Qt.ToolTip
             )
-            self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
             self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
             self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating, True)
             self.setFocusPolicy(QtCore.Qt.NoFocus)
+            self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            self.customContextMenuRequested.connect(self._show_context_menu)
 
             layout = QtWidgets.QHBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)
@@ -2699,12 +2700,24 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             self._base_font = self.label.font()
             self._base_font.setBold(True)
             self.label.setFont(self._base_font)
+            self.label.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+            self.label.customContextMenuRequested.connect(
+                lambda pos: self._show_context_menu_at(self.label.mapToGlobal(pos))
+            )
             layout.addWidget(self.label)
 
             self._fmt = "%H:%M:%S"
             self._show_playtime = True
             self._playtime_label = "Play"
             self._align = "topright"
+            self._timer_deadline: float | None = None
+            self._timer_expired = False
+            self._timer_flash_on = False
+            self._font_color = "#FFFFFF"
+            self._body_color = (0, 0, 0)
+            self._body_alpha = 153
+            self._padding = 8
+            self._border = 0
             self._tick_timer = QtCore.QTimer(self)
             self._tick_timer.setInterval(1000)
             self._tick_timer.timeout.connect(self._tick)
@@ -2716,10 +2729,73 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
                 if play_time:
                     label = self._playtime_label.strip()
                     lines.append(f"{label} {play_time}" if label else play_time)
+            timer_text = self._timer_text()
+            if timer_text:
+                lines.append(timer_text)
+            if self._timer_expired:
+                self._timer_flash_on = not self._timer_flash_on
+                self._apply_label_style(flash_red=self._timer_flash_on)
+            else:
+                self._apply_label_style(flash_red=False)
             self.label.setText("\n".join(lines))
             self.label.adjustSize()
             self.adjustSize()
             self.position_on_screen(self._align)
+
+        def _timer_text(self) -> str | None:
+            if self._timer_deadline is None:
+                return None
+            remaining = int(round(self._timer_deadline - time.monotonic()))
+            if remaining <= 0:
+                self._timer_expired = True
+                return "Timer done"
+            minutes, seconds = divmod(remaining, 60)
+            hours, minutes = divmod(minutes, 60)
+            if hours:
+                return f"Timer {hours:d}:{minutes:02d}:{seconds:02d}"
+            return f"Timer {minutes:02d}:{seconds:02d}"
+
+        def _set_timer(self, minutes: int):
+            self._timer_deadline = time.monotonic() + max(1, int(minutes)) * 60
+            self._timer_expired = False
+            self._timer_flash_on = False
+            self._tick()
+
+        def _cancel_timer(self):
+            self._timer_deadline = None
+            self._timer_expired = False
+            self._timer_flash_on = False
+            self._tick()
+
+        def _show_context_menu(self, pos):
+            self._show_context_menu_at(self.mapToGlobal(pos))
+
+        def _show_context_menu_at(self, global_pos):
+            menu = QtWidgets.QMenu(self)
+            menu.addAction("Add timer 15 min", lambda: self._set_timer(15))
+            menu.addAction("Add timer 30 min", lambda: self._set_timer(30))
+            menu.addAction("Add timer 1 h", lambda: self._set_timer(60))
+            if self._timer_deadline is not None:
+                menu.addSeparator()
+                menu.addAction("Cancel timer", self._cancel_timer)
+            menu.exec(global_pos)
+
+        def _apply_label_style(self, flash_red: bool = False):
+            body_color = (180, 0, 0) if flash_red else self._body_color
+            body_alpha = 230 if flash_red else self._body_alpha
+            border_css = "none" if self._border <= 0 else f"{self._border}px solid rgba(200,200,200,160)"
+            self.label.setStyleSheet(
+                "color: {fc}; background: rgba({r},{g},{b},{a});"
+                "border: {border}; padding: {padding}px; border-radius: 6px;".format(
+                    fc=self._font_color,
+                    r=body_color[0],
+                    g=body_color[1],
+                    b=body_color[2],
+                    a=body_alpha,
+                    border=border_css,
+                    padding=max(0, int(self._padding)),
+                )
+            )
 
         def apply_style(self, *, font_family, font_size, font_color, body_color, body_alpha, padding, border):
             font = QtGui.QFont(self._base_font)
@@ -2727,16 +2803,12 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
                 font.setFamily(font_family)
             font.setPointSize(max(8, int(font_size)))
             self.label.setFont(font)
-            border_css = "none" if border <= 0 else f"{border}px solid rgba(200,200,200,160)"
-            self.label.setStyleSheet(
-                "color: {fc}; background: rgba({r},{g},{b},{a});"
-                "border: {border}; padding: {padding}px; border-radius: 6px;".format(
-                    fc=font_color,
-                    r=body_color[0], g=body_color[1], b=body_color[2], a=body_alpha,
-                    border=border_css,
-                    padding=max(0, int(padding)),
-                )
-            )
+            self._font_color = font_color
+            self._body_color = body_color
+            self._body_alpha = body_alpha
+            self._padding = padding
+            self._border = border
+            self._apply_label_style(flash_red=self._timer_expired and self._timer_flash_on)
 
         def position_on_screen(self, align: str):
             _app = QtWidgets.QApplication.instance()
