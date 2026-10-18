@@ -12,6 +12,42 @@ output = true
 input = true
 log_to_notifications = false
 
+# Device-specific TV remote companion. It is off and non-invasive by default.
+# "diagnostic" records only this VID/PID and never injects or blocks input.
+# "vgamepad" works only if vgamepad and ViGEmBus are already installed;
+# RunLights never installs either component.
+[remote_bridge]
+enabled = false
+device_id = "g20s"
+backend = "diagnostic"
+repeat_delay_ms = 425
+repeat_interval_ms = 90
+escape_hold_seconds = 3.0
+
+  [[remote_bridge.devices]]
+  id = "g20s"
+  vid = 0x4842
+  pid = 0x0001
+
+  [[remote_bridge.profiles]]
+  id = "stremio"
+  executables = ["stremio-shell-ng.exe"]
+
+    [remote_bridge.profiles.bindings]
+    up = "dpad_up"
+    down = "dpad_down"
+    left = "dpad_left"
+    right = "dpad_right"
+    page_up = "left_shoulder"
+    page_down = "right_shoulder"
+    consumer_0041 = "button_a"       # OK / centre
+    consumer_0224 = "button_b"       # Back
+    consumer_00cd = "button_x"       # Play/Pause
+    consumer_0223 = "guide"          # Home
+    consumer_00e9 = "passthrough"    # Volume Up remains stock
+    consumer_00ea = "passthrough"    # Volume Down remains stock
+    consumer_00cf = "ignore"         # Voice
+
 [notification]
 duration = 10
 font = "alegraya sans sc"

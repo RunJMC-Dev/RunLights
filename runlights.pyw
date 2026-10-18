@@ -74,6 +74,18 @@ from runlights.tray import serve_in_thread  # noqa: E402
 from runlights.ipc import PIPE_NAME  # noqa: E402
 from runlights.config import load_config, ConfigError  # noqa: E402
 from runlights import wled  # noqa: E402
+from runlights.core import EventBus, ModuleManager  # noqa: E402
+from runlights.core.app_monitor import (  # noqa: E402
+    ApplicationMonitorModule,
+    ApplicationStarted,
+    ApplicationStopped,
+    ForegroundApplicationChanged,
+)
+from runlights.modules.remote_bridge import (  # noqa: E402
+    RemoteBridgeModule,
+    set_stock_input_escape,
+)
+from runlights.remote.config import load_remote_bridge_config  # noqa: E402
 
 try:
     import pystray  # type: ignore
@@ -123,8 +135,12 @@ def start_tray_icon(stop_event: threading.Event, debug_request: threading.Event)
         stop_event.set()
         icon.stop()
 
+    def on_disable_remote(icon, item):
+        set_stock_input_escape(_here, True)
+
     menu = pystray.Menu(
         pystray.MenuItem("Debug", on_debug),
+        pystray.MenuItem("Disable Remote / Stock Input", on_disable_remote),
         pystray.MenuItem("Quit", on_quit),
     )
     icon = pystray.Icon("RunLights", icon_image, "RunLights", menu=menu)
@@ -432,6 +448,9 @@ def _run_debug_window(
             overlays_btn = QtWidgets.QPushButton("Overlays")
             overlays_btn.clicked.connect(lambda _=None: self._show_overlay_config_dialog())
             sidebar_layout.addWidget(overlays_btn)
+            remote_btn = QtWidgets.QPushButton("Remote")
+            remote_btn.clicked.connect(lambda _=None: self._show_remote_dialog())
+            sidebar_layout.addWidget(remote_btn)
             settings_btn = QtWidgets.QPushButton("Settings")
             settings_btn.clicked.connect(lambda _=None: self._show_settings_dialog())
             sidebar_layout.addWidget(settings_btn)
@@ -2170,6 +2189,159 @@ def _run_debug_window(
 
             dialog.exec()
 
+        def _show_remote_dialog(self):
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Remote Bridge")
+            dialog.setModal(True)
+            dialog.resize(760, 560)
+            layout = QtWidgets.QVBoxLayout(dialog)
+
+            current = load_remote_bridge_config(cfg_raw_global or {})
+            form = QtWidgets.QFormLayout()
+            enabled_cb = QtWidgets.QCheckBox("Enable isolated companion")
+            enabled_cb.setChecked(current.enabled)
+            form.addRow("Remote bridge", enabled_cb)
+            device_id = QtWidgets.QLineEdit(current.device_id)
+            form.addRow("Device definition", device_id)
+            selected = current.selected_device()
+            vid_edit = QtWidgets.QLineEdit(f"0x{selected.vid:04X}" if selected else "0x4842")
+            pid_edit = QtWidgets.QLineEdit(f"0x{selected.pid:04X}" if selected else "0x0001")
+            id_row = QtWidgets.QHBoxLayout()
+            id_row.addWidget(QtWidgets.QLabel("VID"))
+            id_row.addWidget(vid_edit)
+            id_row.addWidget(QtWidgets.QLabel("PID"))
+            id_row.addWidget(pid_edit)
+            form.addRow("Physical receiver", id_row)
+            backend_combo = QtWidgets.QComboBox()
+            backend_combo.addItem("Diagnostic only (safe)", "diagnostic")
+            backend_combo.addItem("ViGEm/vgamepad (legacy, if already installed)", "vgamepad")
+            backend_combo.setCurrentIndex(max(0, backend_combo.findData(current.backend)))
+            form.addRow("Output backend", backend_combo)
+            layout.addLayout(form)
+
+            warning = QtWidgets.QLabel(
+                "The bridge reads only the selected VID/PID and activates the Stremio profile only "
+                "while stremio-shell-ng.exe is foreground. Diagnostic mode never injects or blocks input."
+            )
+            warning.setWordWrap(True)
+            layout.addWidget(warning)
+
+            detected_label = QtWidgets.QLabel("Detected matching interfaces")
+            detected_label.setStyleSheet("font-weight: 600;")
+            layout.addWidget(detected_label)
+            detected_box = QtWidgets.QPlainTextEdit()
+            detected_box.setReadOnly(True)
+            detected_box.setMaximumHeight(105)
+            try:
+                from runlights.remote.win32_raw_input import enumerate_devices
+
+                matches = [
+                    f"{item.kind}: {item.path}"
+                    for item in enumerate_devices()
+                    if selected and selected.matches(item.path)
+                ]
+                detected_box.setPlainText(
+                    "\n".join(matches) if matches else "No matching Raw Input interfaces detected."
+                )
+            except Exception as exc:
+                detected_box.setPlainText(f"Device enumeration unavailable: {exc}")
+            layout.addWidget(detected_box)
+
+            live_label = QtWidgets.QLabel("Live bridge status / input test")
+            live_label.setStyleSheet("font-weight: 600;")
+            layout.addWidget(live_label)
+            live_box = QtWidgets.QPlainTextEdit()
+            live_box.setReadOnly(True)
+            live_box.setPlaceholderText("Enable the bridge, focus Stremio, then press remote buttons.")
+            layout.addWidget(live_box, stretch=1)
+
+            state_dir = _here / ".runlights"
+            status_path = state_dir / "remote-bridge-status.json"
+            bridge_log_path = state_dir / "remote-bridge.log"
+
+            def _refresh_live():
+                parts = []
+                try:
+                    if status_path.exists():
+                        status = json.loads(status_path.read_text(encoding="utf-8"))
+                        parts.append("Status: " + json.dumps(status, sort_keys=True))
+                except Exception:
+                    pass
+                try:
+                    if bridge_log_path.exists():
+                        lines = bridge_log_path.read_text(
+                            encoding="utf-8", errors="replace"
+                        ).splitlines()
+                        parts.extend(lines[-120:])
+                except Exception:
+                    pass
+                text = "\n".join(parts)
+                if text != live_box.toPlainText():
+                    live_box.setPlainText(text)
+                    live_box.verticalScrollBar().setValue(
+                        live_box.verticalScrollBar().maximum()
+                    )
+
+            timer = QtCore.QTimer(dialog)
+            timer.timeout.connect(_refresh_live)
+            timer.start(500)
+            _refresh_live()
+
+            buttons = QtWidgets.QHBoxLayout()
+            disable_btn = QtWidgets.QPushButton("Disable now / stock input")
+            resume_btn = QtWidgets.QPushButton("Clear disable")
+            save_btn = QtWidgets.QPushButton("Save")
+            close_btn = QtWidgets.QPushButton("Close")
+            buttons.addWidget(disable_btn)
+            buttons.addWidget(resume_btn)
+            buttons.addStretch(1)
+            buttons.addWidget(save_btn)
+            buttons.addWidget(close_btn)
+            layout.addLayout(buttons)
+
+            def _disable_now():
+                set_stock_input_escape(_here, True)
+                self.append_line("Remote bridge disabled immediately; stock input remains active")
+                _refresh_live()
+
+            def _resume():
+                set_stock_input_escape(_here, False)
+                self.append_line("Remote bridge disable marker cleared")
+                _refresh_live()
+
+            def _save():
+                try:
+                    vid = int(vid_edit.text().strip(), 0)
+                    pid = int(pid_edit.text().strip(), 0)
+                except ValueError:
+                    QtWidgets.QMessageBox.warning(
+                        dialog, "Remote Bridge", "VID and PID must be numbers such as 0x4842."
+                    )
+                    return
+                settings = {
+                    "enabled": enabled_cb.isChecked(),
+                    "device_id": device_id.text().strip() or "g20s",
+                    "backend": backend_combo.currentData(),
+                    "vid": vid,
+                    "pid": pid,
+                    "repeat_delay_ms": current.repeat_delay_ms,
+                    "repeat_interval_ms": current.repeat_interval_ms,
+                    "escape_hold_seconds": current.escape_hold_seconds,
+                }
+                if _upsert_remote_bridge_in_config(CONFIG_PATH, settings, self.append_line):
+                    new_cfg = _reload_config(self.append_line)
+                    self.append_line(
+                        "Remote bridge settings saved; companion supervisor will apply them"
+                    )
+                    if new_cfg is not None:
+                        enabled_cb.setChecked(load_remote_bridge_config(new_cfg).enabled)
+
+            disable_btn.clicked.connect(lambda _=None: _disable_now())
+            resume_btn.clicked.connect(lambda _=None: _resume())
+            save_btn.clicked.connect(lambda _=None: _save())
+            close_btn.clicked.connect(lambda _=None: dialog.accept())
+            dialog.exec()
+
         def _set_debug_filters(self, *, output: bool | None = None, input: bool | None = None):
             if output is not None:
                 self._show_output_logs = bool(output)
@@ -3119,6 +3291,23 @@ def _render_debug_window_block(settings: dict) -> list[str]:
     return lines
 
 
+def _render_remote_bridge_block(settings: dict) -> list[str]:
+    lines = ["", "[remote_bridge]"]
+    lines.append(f"enabled = {str(bool(settings.get('enabled', False))).lower()}")
+    lines.append(f"device_id = \"{_toml_escape(str(settings.get('device_id', 'g20s')))}\"")
+    lines.append(f"backend = \"{_toml_escape(str(settings.get('backend', 'diagnostic')))}\"")
+    lines.append(f"repeat_delay_ms = {int(settings.get('repeat_delay_ms', 425))}")
+    lines.append(f"repeat_interval_ms = {int(settings.get('repeat_interval_ms', 90))}")
+    lines.append(f"escape_hold_seconds = {float(settings.get('escape_hold_seconds', 3.0))}")
+    lines.append("")
+    lines.append("[[remote_bridge.devices]]")
+    lines.append(f"id = \"{_toml_escape(str(settings.get('device_id', 'g20s')))}\"")
+    lines.append(f"vid = 0x{int(settings.get('vid', 0x4842)):04X}")
+    lines.append(f"pid = 0x{int(settings.get('pid', 0x0001)):04X}")
+    lines.append("")
+    return lines
+
+
 def _find_table_block(lines: list[str], table_name: str) -> tuple[int, int] | None:
     start = None
     target = f"[{table_name}]"
@@ -3196,6 +3385,45 @@ def _upsert_debug_window_in_config(config_path: Path, settings: dict, log_messag
         return True
     except Exception as exc:
         log_message(f"Failed to write config: {exc}")
+        return False
+
+
+def _upsert_remote_bridge_in_config(config_path: Path, settings: dict, log_message) -> bool:
+    if not config_path.exists():
+        log_message(f"Config file not found: {config_path}")
+        return False
+    try:
+        raw = config_path.read_text(encoding="utf-8")
+        lines = raw.splitlines()
+        found = _find_table_block(lines, "remote_bridge")
+        insert_idx = len(lines)
+        if found:
+            start, end = found
+            insert_idx = start
+            del lines[start:end]
+            # Remove device definitions created by this dialog, while preserving
+            # data-driven application profiles that may follow them.
+            while start < len(lines) and lines[start].strip().startswith(
+                "[[remote_bridge.devices]]"
+            ):
+                nested_end = len(lines)
+                for index in range(start + 1, len(lines)):
+                    stripped = lines[index].strip()
+                    if lines[index].lstrip() == lines[index] and stripped.startswith("["):
+                        nested_end = index
+                        break
+                del lines[start:nested_end]
+        block_lines = _render_remote_bridge_block(settings)
+        if insert_idx == 0 and block_lines and block_lines[0] == "":
+            block_lines = block_lines[1:]
+        lines[insert_idx:insert_idx] = block_lines
+        out = "\n".join(lines)
+        if raw.endswith("\n"):
+            out += "\n"
+        config_path.write_text(out, encoding="utf-8")
+        return True
+    except Exception as exc:
+        log_message(f"Failed to write remote bridge config: {exc}")
         return False
 
 
@@ -4522,6 +4750,7 @@ def main() -> int:
 
     debug_state = {"open": False}
     notify_state = {"in_notify": False}
+    module_manager: ModuleManager | None = None
 
     def log_message(msg: str, msg_id: str | None = None, msg_class: str | None = None):
         entry = _build_log_entry(msg, msg_id=msg_id, msg_class=msg_class)
@@ -4616,13 +4845,58 @@ def main() -> int:
     if cfg is not None:
         _start_mqtt_listener(cfg.raw, stop_event, notify_queue, log_message)
 
-    # Start process watcher if we have processes configured.
+    # Start the modular core. Application detection is now a shared event source;
+    # lighting and future snap-ins subscribe independently.
     if cfg is not None:
-        threading.Thread(
-            target=_process_watch_loop,
-            args=(cfg.raw, stop_event, log_message),
-            daemon=True,
-        ).start()
+        event_bus = EventBus(log_message)
+        module_manager = ModuleManager(log_message)
+        running_apps: set[str] = set()
+
+        def on_application_started(event: ApplicationStarted):
+            global CURRENT_APP_ID, CURRENT_APP_STARTED_AT
+            running_apps.add(event.app_id)
+            CURRENT_APP_ID = event.app_id
+            CURRENT_APP_STARTED_AT = time.monotonic()
+            log_message(f"{event.app_id} started")
+            _apply_gaming_preset(cfg.raw, cfg.raw.get("gaming_preset", "Gaming"), log_message)
+            modes = next(
+                (
+                    app.get("modes", [])
+                    for app in cfg.raw.get("application", [])
+                    if app.get("id") == event.app_id
+                ),
+                [],
+            )
+            if modes and modes[0].get("output") == "segmentsolid":
+                _apply_segmentsolid_base(modes[0], cfg.raw, log_message)
+
+        def on_application_stopped(event: ApplicationStopped):
+            global CURRENT_APP_ID, CURRENT_APP_STARTED_AT
+            running_apps.discard(event.app_id)
+            log_message(f"{event.app_id} terminated")
+            if CURRENT_APP_ID == event.app_id:
+                CURRENT_APP_ID = sorted(running_apps)[0] if running_apps else None
+                CURRENT_APP_STARTED_AT = time.monotonic() if CURRENT_APP_ID else None
+                if CURRENT_APP_ID is None:
+                    _apply_idle_preset(cfg.raw, log_message)
+
+        def on_foreground_changed(event: ForegroundApplicationChanged):
+            if event.app_id:
+                log_message(f"Active window: {event.app_id}")
+
+        event_bus.subscribe(ApplicationStarted, on_application_started)
+        event_bus.subscribe(ApplicationStopped, on_application_stopped)
+        event_bus.subscribe(ForegroundApplicationChanged, on_foreground_changed)
+        module_manager.add(
+            ApplicationMonitorModule(
+                cfg.raw.get("application", []),
+                event_bus,
+                log_message,
+                pause_event=PAUSE_EVENT,
+            )
+        )
+        module_manager.add(RemoteBridgeModule(CONFIG_PATH, _here, log_message))
+        module_manager.start_all()
         threading.Thread(
             target=_ocr_poll_loop,
             args=(cfg.raw, stop_event, log_message, ocr_fail_queue),
@@ -4677,6 +4951,8 @@ def main() -> int:
     except KeyboardInterrupt:
         stop_event.set()
 
+    if module_manager is not None:
+        module_manager.stop_all()
     if tray_icon:
         tray_icon.stop()
     if debug_ui and debug_ui.window:

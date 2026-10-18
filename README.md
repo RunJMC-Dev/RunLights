@@ -3,10 +3,13 @@
 WLED interface for PC applications that can drive multiple WLED instances from a desktop GUI (system tray) or a CLI.
 
 ## Features
+
 - Control multiple WLED controllers from one PC.
 - Target specific segments (e.g., highlight the shelf with the Mega Drive).
 - System tray GUI for quick toggles plus a CLI for scripting/automation.
 - Designed to plug into other PC applications.
+- Modular lifecycle and application-context events for isolated snap-in modules.
+- Optional device-specific TV remote diagnostics and Stremio gamepad profile.
 
 ## Interfaces
 - **GUI**: Runs as a tray app for quick on/off, segment selection, and presets.
@@ -63,6 +66,64 @@ controllers = ["PCROOMLHS"]
   interval_ms = 300
   hold_ms = 1500
 ```
+
+### Remote Bridge (G20S / Stremio)
+
+`Runlights.RemoteBridge` is a separate companion process supervised by RunLights. A bridge crash does not run inside the lighting/UI process, and RunLights restarts it with a short delay. It reads Windows Raw Input from only the configured physical receiver (`VID_4842`, `PID_0001` by default), never records ordinary keyboard text, and activates an application profile only while its executable is foreground.
+
+Open **Debug → Remote** to enable/disable the companion, select the device definition and VID/PID, inspect matching interfaces, and watch the live input/profile/action log. The safe default backend is `diagnostic`; it observes and tests mappings but does not inject or suppress input. Configuration is data-driven under `[remote_bridge]`, `[[remote_bridge.devices]]`, and `[[remote_bridge.profiles]]`; see `config.example.toml` for the complete Stremio profile. A future FreeTube profile can use the same structure with `executables = ["FreeTube.exe"]` and its own bindings.
+
+The built-in G20S mapping is:
+
+| Remote input | Stremio gamepad action |
+|---|---|
+| D-pad | Xbox D-pad |
+| OK / consumer `0x0041` | A / Select |
+| Back / consumer `0x0224` | B / Back |
+| Play/Pause / consumer `0x00CD` | X / player Play-Pause |
+| Page Up / Page Down | Left / right shoulder |
+| Volume Up / Down | Stock Windows consumer-volume input (not remapped) |
+
+Stremio 5's gamepad support must be enabled in Stremio's Interface settings. Its native gamepad path provides one-item focus navigation and player-specific actions, which is more reliable than translating the remote to hard-wired desktop keyboard shortcuts.
+
+#### Output backend status
+
+Windows Raw Input can identify which keyboard/consumer-control interface produced an event, but a normal user-mode app cannot suppress only that device's legacy arrow keystrokes. A complete remap therefore needs both a virtual controller and device-scoped suppression. RunLights does not install a driver or change administrator-level settings.
+
+- `diagnostic` (default): safe input test and profile activation; no virtual device, injection, or suppression.
+- `vgamepad`: optional compatibility adapter only when the Python package and ViGEmBus are already installed. ViGEmBus is retired, so this is not installed or recommended automatically.
+- HIDMaestro is a more recent virtual-controller option, but it still requires a one-time trusted system component and is not yet a RunLights backend. It must be reviewed and explicitly approved before installation.
+
+Because the physical G20S also exposes a keyboard collection, virtual output alone does not prevent duplicate Stremio keyboard navigation. Do not enable a virtual backend expecting full remapping until a device-scoped interception approach has been selected and approved.
+
+#### Safety, recovery, and removal
+
+- Choose **Disable Remote / Stock Input** from the tray, click **Disable now / stock input** in **Debug → Remote**, or hold the remote's **Home + Back** buttons for three seconds, to create the immediate disable marker. The virtual backend is disconnected and held actions are released. Click **Clear disable** to allow activation again.
+- The output device is connected only while a configured target executable is the foreground app and is disconnected on focus loss, bridge shutdown, or RunLights shutdown.
+- Set `remote_bridge.enabled = false` to stop the companion. To remove the feature completely, stop RunLights and delete the `[remote_bridge]` section plus `.runlights` (logs/status only). No drivers or services are installed by RunLights.
+- If an optional third-party virtual-device stack was installed separately, remove it with that product's installer; deleting RunLights does not remove system drivers.
+
+#### Manual verification checklist
+
+Use **Debug → Remote** in `diagnostic` mode first:
+
+1. Confirm only paths containing the configured VID/PID appear and remote presses populate the live log.
+2. Type and navigate with a normal keyboard; no events from it should appear in the bridge log and its behavior must remain unchanged.
+3. Test existing physical gamepads in Windows/Steam; diagnostic mode creates no controller and does not alter Steam Input.
+4. Focus and unfocus `stremio-shell-ng.exe`; verify profile `stremio` changes between active and idle.
+5. With any approved virtual backend, confirm the virtual controller appears only while Stremio is foreground and disappears immediately on focus loss or disable.
+6. Verify menu D-pad focus, OK/select, player play-pause, Back, seek, volume, and held-button repeat. Full behavior verification depends on approved device suppression and cannot be claimed from diagnostic mode.
+
+### Modular architecture
+
+The `runlights.core` package supplies the shared snap-in points:
+
+- `ModuleManager` owns start/stop order and isolates module failures.
+- `EventBus` lets modules subscribe without importing one another.
+- `ApplicationMonitorModule` publishes application started/stopped and foreground-change events once for lighting, remote mapping, launch actions, notifications, and future modules.
+- `RemoteBridgeModule` supervises low-level input code in the companion rather than loading it into the main UI process.
+
+New features should be modules with a small lifecycle (`start`, `stop`) and event subscriptions. Lighting should continue moving behind a `LightingModule` subscriber over time; this release moves shared application detection into the core while retaining the existing lighting behavior.
 
 ## Mode Inputs/Outputs
 Inputs

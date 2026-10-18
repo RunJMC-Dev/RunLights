@@ -10,4 +10,5 @@ venv/
 *.log
 /.idea/
 /.vscode/
+/.runlights/
 .DS_Store
