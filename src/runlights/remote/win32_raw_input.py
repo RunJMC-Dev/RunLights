@@ -18,8 +18,10 @@ WM_CLOSE = 0x0010
 WM_DESTROY = 0x0002
 RID_INPUT = 0x10000003
 RIDI_DEVICENAME = 0x20000007
+RIDI_DEVICEINFO = 0x2000000B
 RIDEV_INPUTSINK = 0x00000100
 RIDEV_DEVNOTIFY = 0x00002000
+RIDEV_PAGEONLY = 0x00000020
 RIM_TYPEMOUSE = 0
 RIM_TYPEKEYBOARD = 1
 RIM_TYPEHID = 2
@@ -73,10 +75,45 @@ class RAWINPUTDEVICELIST(ctypes.Structure):
     _fields_ = [("hDevice", wintypes.HANDLE), ("dwType", wintypes.DWORD)]
 
 
+class RID_DEVICE_INFO_HID(ctypes.Structure):
+    _fields_ = [
+        ("dwVendorId", wintypes.DWORD),
+        ("dwProductId", wintypes.DWORD),
+        ("dwVersionNumber", wintypes.DWORD),
+        ("usUsagePage", wintypes.USHORT),
+        ("usUsage", wintypes.USHORT),
+    ]
+
+
+class _RID_DEVICE_INFO_UNION(ctypes.Union):
+    _fields_ = [("hid", RID_DEVICE_INFO_HID), ("reserved", wintypes.DWORD * 6)]
+
+
+class RID_DEVICE_INFO(ctypes.Structure):
+    _anonymous_ = ("data",)
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("dwType", wintypes.DWORD),
+        ("data", _RID_DEVICE_INFO_UNION),
+    ]
+
+
 @dataclass(frozen=True)
 class RawInputDevice:
     path: str
     kind: str
+    usage_page: int | None = None
+    usage: int | None = None
+
+
+def _device_info(handle: int) -> RID_DEVICE_INFO | None:
+    info = RID_DEVICE_INFO()
+    info.cbSize = ctypes.sizeof(RID_DEVICE_INFO)
+    size = wintypes.UINT(info.cbSize)
+    result = ctypes.windll.user32.GetRawInputDeviceInfoW(
+        handle, RIDI_DEVICEINFO, ctypes.byref(info), ctypes.byref(size)
+    )
+    return info if result >= 0 else None
 
 
 def _require_windows() -> None:
@@ -109,11 +146,22 @@ def enumerate_devices() -> list[RawInputDevice]:
     if result < 0:
         return []
     kinds = {RIM_TYPEMOUSE: "mouse", RIM_TYPEKEYBOARD: "keyboard", RIM_TYPEHID: "hid"}
-    return [
-        RawInputDevice(_device_name(item.hDevice), kinds.get(item.dwType, "unknown"))
-        for item in items[: result]
-        if _device_name(item.hDevice)
-    ]
+    devices: list[RawInputDevice] = []
+    for item in items[: result]:
+        path = _device_name(item.hDevice)
+        if not path:
+            continue
+        info = _device_info(item.hDevice)
+        is_hid = bool(info and item.dwType == RIM_TYPEHID)
+        devices.append(
+            RawInputDevice(
+                path,
+                kinds.get(item.dwType, "unknown"),
+                info.hid.usUsagePage if is_hid else None,
+                info.hid.usUsage if is_hid else None,
+            )
+        )
+    return devices
 
 
 class RawInputListener:
@@ -125,12 +173,14 @@ class RawInputListener:
         on_tick: Callable[[float], None],
         stop_event: threading.Event,
         log: Callable[[str], None],
+        extra_hid_usages: tuple[tuple[int, int], ...] = (),
     ):
         _require_windows()
         self._on_event = on_event
         self._on_tick = on_tick
         self._stop_event = stop_event
         self._log = log
+        self._extra_hid_usages = extra_hid_usages
         self._device_names: dict[int, str] = {}
         self._hid_pressed: dict[int, set[int]] = {}
         self._hwnd = None
@@ -219,9 +269,20 @@ class RawInputListener:
         )
         if not self._hwnd:
             raise ctypes.WinError()
-        devices = (RAWINPUTDEVICE * 2)(
-            RAWINPUTDEVICE(0x01, 0x06, RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, self._hwnd),
-            RAWINPUTDEVICE(0x0C, 0x01, RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, self._hwnd),
+        usages = [(0x01, 0x06), (0x0C, 0x01), *self._extra_hid_usages]
+        usages = list(dict.fromkeys(usages))
+        devices = (RAWINPUTDEVICE * len(usages))(
+            *(
+                RAWINPUTDEVICE(
+                    page,
+                    usage,
+                    RIDEV_INPUTSINK
+                    | RIDEV_DEVNOTIFY
+                    | (RIDEV_PAGEONLY if usage == 0 else 0),
+                    self._hwnd,
+                )
+                for page, usage in usages
+            )
         )
         if not user32.RegisterRawInputDevices(devices, len(devices), ctypes.sizeof(RAWINPUTDEVICE)):
             raise ctypes.WinError()
@@ -283,6 +344,10 @@ class RawInputListener:
         for usage in sorted(usages - previous):
             self._on_event(InputEvent(path, f"consumer_{usage:04x}", True, now))
         self._hid_pressed[handle] = usages
+        if not usages and any(report):
+            # Vendor-defined reports are exposed only as device-scoped hex for
+            # diagnostics. They are never decoded as or logged as keyboard text.
+            self._on_event(InputEvent(path, f"vendor_{report[:32].hex()}", True, now))
 
 
 def foreground_executable() -> str | None:

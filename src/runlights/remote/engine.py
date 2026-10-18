@@ -9,7 +9,7 @@ from .activation import ProfileActivator
 from .backends import DiagnosticBackend, OutputBackend, create_backend
 from .key_state import KeyStateTracker
 from .models import AppProfile, InputEvent, RemoteBridgeConfig
-from .win32_raw_input import RawInputListener, foreground_executable
+from .win32_raw_input import RawInputListener, enumerate_devices, foreground_executable
 
 
 class RemoteBridgeEngine:
@@ -42,7 +42,26 @@ class RemoteBridgeEngine:
         if self.device is None:
             raise RuntimeError(f"configured remote device not found: {self.config.device_id}")
         self._write_status("starting")
-        listener = RawInputListener(self.handle_input, self.tick, self.stop_event, self.log)
+        extra_usages: list[tuple[int, int]] = []
+        try:
+            extra_usages = [
+                (item.usage_page, item.usage)
+                for item in enumerate_devices()
+                if self.device.matches(item.path)
+                and item.kind == "hid"
+                and item.usage_page is not None
+                and item.usage is not None
+                and (item.usage_page, item.usage) != (0x0C, 0x01)
+            ]
+        except Exception as exc:
+            self.log(f"vendor HID discovery unavailable: {exc}")
+        listener = RawInputListener(
+            self.handle_input,
+            self.tick,
+            self.stop_event,
+            self.log,
+            tuple(extra_usages),
+        )
         try:
             listener.run()
         finally:

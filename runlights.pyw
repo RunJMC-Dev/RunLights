@@ -2236,7 +2236,11 @@ def _run_debug_window(
                 from runlights.remote.win32_raw_input import enumerate_devices
 
                 matches = [
-                    f"{item.kind}: {item.path}"
+                    (
+                        f"{item.kind} usage={item.usage_page:#06x}/{item.usage:#06x}: {item.path}"
+                        if item.usage_page is not None and item.usage is not None
+                        else f"{item.kind}: {item.path}"
+                    )
                     for item in enumerate_devices()
                     if selected and selected.matches(item.path)
                 ]
