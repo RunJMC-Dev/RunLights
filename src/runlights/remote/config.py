@@ -14,6 +14,7 @@ DEFAULT_BINDINGS = {
     "consumer_0224": "button_b",
     "consumer_00cd": "button_x",
     "consumer_0223": "guide",
+    "consumer_00e2": "passthrough",
     "consumer_00e9": "passthrough",
     "consumer_00ea": "passthrough",
     "consumer_00cf": "ignore",

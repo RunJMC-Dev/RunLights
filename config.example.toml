@@ -44,6 +44,7 @@ escape_hold_seconds = 3.0
     consumer_0224 = "button_b"       # Back
     consumer_00cd = "button_x"       # Play/Pause
     consumer_0223 = "guide"          # Home
+    consumer_00e2 = "passthrough"    # Mute remains stock
     consumer_00e9 = "passthrough"    # Volume Up remains stock
     consumer_00ea = "passthrough"    # Volume Down remains stock
     consumer_00cf = "ignore"         # Voice

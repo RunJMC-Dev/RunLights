@@ -122,6 +122,7 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(0x4842, config.selected_device().vid)
         self.assertEqual("stremio", config.profiles[0].id)
         self.assertEqual("button_a", config.profiles[0].bindings["consumer_0041"])
+        self.assertEqual("passthrough", config.profiles[0].bindings["consumer_00e2"])
 
 
 if __name__ == "__main__":

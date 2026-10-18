@@ -82,6 +82,7 @@ The built-in G20S mapping is:
 | Back / consumer `0x0224` | B / Back |
 | Play/Pause / consumer `0x00CD` | X / player Play-Pause |
 | Page Up / Page Down | Left / right shoulder |
+| Mute / consumer `0x00E2` | Stock Windows mute input (not remapped) |
 | Volume Up / Down | Stock Windows consumer-volume input (not remapped) |
 
 Stremio 5's gamepad support must be enabled in Stremio's Interface settings. Its native gamepad path provides one-item focus navigation and player-specific actions, which is more reliable than translating the remote to hard-wired desktop keyboard shortcuts.

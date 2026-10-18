@@ -39,7 +39,16 @@ KEYBOARD_CONTROLS = {
     0x1B: "escape",
 }
 
-KNOWN_CONSUMER_USAGES = {0x0041, 0x0224, 0x00E9, 0x00EA, 0x00CD, 0x00CF, 0x0223}
+KNOWN_CONSUMER_USAGES = {
+    0x0041,
+    0x0224,
+    0x00E2,
+    0x00E9,
+    0x00EA,
+    0x00CD,
+    0x00CF,
+    0x0223,
+}
 
 
 class RAWINPUTDEVICE(ctypes.Structure):
@@ -344,7 +353,7 @@ class RawInputListener:
         for usage in sorted(usages - previous):
             self._on_event(InputEvent(path, f"consumer_{usage:04x}", True, now))
         self._hid_pressed[handle] = usages
-        if not usages and any(report):
+        if not usages and "&MI_04" in path.upper() and any(report):
             # Vendor-defined reports are exposed only as device-scoped hex for
             # diagnostics. They are never decoded as or logged as keyboard text.
             self._on_event(InputEvent(path, f"vendor_{report[:32].hex()}", True, now))

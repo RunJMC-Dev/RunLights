@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -72,7 +73,14 @@ class RemoteBridgeEngine:
         if self.device is None or not self.device.matches(event.device_path):
             return
         state = "down" if event.pressed else "up"
-        self.log(f"input device={self.device.id} control={event.control} state={state}")
+        match = re.search(r"&MI_([0-9A-F]{2})(?:&COL(\d+))?", event.device_path.upper())
+        interface = f"MI_{match.group(1)}" if match else "unknown"
+        if match and match.group(2):
+            interface += f"/COL{match.group(2)}"
+        self.log(
+            f"input device={self.device.id} interface={interface} "
+            f"control={event.control} state={state}"
+        )
         if event.control in {"consumer_0223", "consumer_0224"}:
             if event.pressed:
                 self._escape_pressed.setdefault(event.control, event.timestamp)
