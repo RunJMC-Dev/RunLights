@@ -71,7 +71,42 @@ controllers = ["PCROOMLHS"]
 
 `Runlights.RemoteBridge` is a separate companion process supervised by RunLights. A bridge crash does not run inside the lighting/UI process, and RunLights restarts it with a short delay. It reads Windows Raw Input from only the configured physical receiver (`VID_4842`, `PID_0001` by default), never records ordinary keyboard text, and activates an application profile only while its executable is foreground.
 
-Open **Debug → Remote** to enable/disable the companion, select the device definition and VID/PID, inspect matching interfaces, and watch the live input/profile/action log. The safe default backend is `diagnostic`; it observes and tests mappings but does not inject or suppress input. Configuration is data-driven under `[remote_bridge]`, `[[remote_bridge.devices]]`, and `[[remote_bridge.profiles]]`; see `config.example.toml` for the complete Stremio profile. A future FreeTube profile can use the same structure with `executables = ["FreeTube.exe"]` and its own bindings.
+Open **Debug → Remote** to enable/disable the companion, select the device definition and VID/PID, inspect matching interfaces, and watch the live input/profile/action log. The safe default is `input_mode = "observe"` with the `diagnostic` backend; it observes and tests mappings but does not inject or suppress input. Configuration is data-driven under `[remote_bridge]`, `[[remote_bridge.devices]]`, and `[[remote_bridge.profiles]]`; see `config.example.toml` for the complete Stremio profile. A future FreeTube profile can use the same structure with `executables = ["FreeTube.exe"]` and its own bindings.
+
+Profiles may also set `default = true` with no executables. That fallback is selected whenever no application-specific profile matches, so a permanently owned remote can retain normal desktop/media behavior. A matching application profile always wins. The `sendinput` backend accepts named actions such as `key_up`, `key_enter`, `key_escape`, `key_media_play_pause`, letters/digits, `key_f1` through `key_f24`, and chords such as `key_shift+tab` or `key_ctrl+l`. For safety, RunLights refuses this backend unless `input_mode = "owned"`; observational Raw Input would otherwise duplicate the receiver's original HID keystrokes.
+
+Example fallback and per-app key profiles after ownership is installed:
+
+```toml
+[[remote_bridge.profiles]]
+id = "stock"
+default = true
+backend = "sendinput"
+  [remote_bridge.profiles.bindings]
+  up = "key_up"
+  down = "key_down"
+  left = "key_left"
+  right = "key_right"
+  consumer_0041 = "key_enter"
+  consumer_0224 = "key_escape"
+  consumer_00cd = "key_media_play_pause"
+  consumer_00e2 = "key_volume_mute"
+  consumer_00e9 = "key_volume_up"
+  consumer_00ea = "key_volume_down"
+
+[[remote_bridge.profiles]]
+id = "freetube"
+executables = ["FreeTube.exe"]
+backend = "sendinput"
+  [remote_bridge.profiles.bindings]
+  up = "key_shift+tab"
+  down = "key_tab"
+  left = "key_left"
+  right = "key_right"
+  consumer_0041 = "key_enter"
+  consumer_0224 = "key_escape"
+  consumer_00cd = "key_space"
+```
 
 The built-in G20S mapping is:
 
@@ -87,21 +122,24 @@ The built-in G20S mapping is:
 
 Stremio 5's gamepad support must be enabled in Stremio's Interface settings. Its native gamepad path provides one-item focus navigation and player-specific actions, which is more reliable than translating the remote to hard-wired desktop keyboard shortcuts.
 
-#### Output backend status
+#### Input ownership and output backend status
 
-Windows Raw Input can identify which keyboard/consumer-control interface produced an event, but a normal user-mode app cannot suppress only that device's legacy arrow keystrokes. A complete remap therefore needs both a virtual controller and device-scoped suppression. RunLights does not install a driver or change administrator-level settings.
+Windows Raw Input can identify which keyboard/consumer-control interface produced an event, but a normal user-mode app cannot suppress only that device's legacy arrow keystrokes. For a permanent dedicated-remote setup, RunLights supports an `owned` path that rebinds only `USB\VID_4842&PID_0001&MI_02` to Microsoft's in-box WinUSB driver. The companion then reads that interface directly and emits the active profile. MI_03 mouse, MI_04 vendor HID, audio interfaces, normal keyboards, and physical controllers are not matched. RunLights does not install or sign this package automatically.
+
+The narrow INF template and rollback notes are in `drivers/g20s-mi02`. It intentionally has no signed catalog in the repository. Windows will reject it until a catalog is created and signed; producing/trusting that certificate and installing the package are administrator-level changes that require explicit approval. The UI also refuses to save `owned` mode until exactly one matching RunLights WinUSB interface is present.
 
 - `diagnostic` (default): safe input test and profile activation; no virtual device, injection, or suppression.
+- `sendinput`: emits only configured named Windows navigation/media keys; available only with exclusive `owned` input.
 - `vgamepad`: optional compatibility adapter only when the Python package and ViGEmBus are already installed. ViGEmBus is retired, so this is not installed or recommended automatically.
 - HIDMaestro is a more recent virtual-controller option, but it still requires a one-time trusted system component and is not yet a RunLights backend. It must be reviewed and explicitly approved before installation.
 
-Because the physical G20S also exposes a keyboard collection, virtual output alone does not prevent duplicate Stremio keyboard navigation. Do not enable a virtual backend expecting full remapping until a device-scoped interception approach has been selected and approved.
+Because the physical G20S also exposes a keyboard collection, virtual output alone does not prevent duplicate Stremio keyboard navigation. Use gamepad or key output only after the device-scoped MI_02 ownership step. Stremio still benefits from its native gamepad route for D-pad focus plus player-aware OK/Back/seek; per-app key profiles are most useful for applications such as FreeTube whose keyboard controls are suitable.
 
 #### Safety, recovery, and removal
 
-- Choose **Disable Remote / Stock Input** from the tray, click **Disable now / stock input** in **Debug → Remote**, or hold the remote's **Home + Back** buttons for three seconds, to create the immediate disable marker. The virtual backend is disconnected and held actions are released. Click **Clear disable** to allow activation again.
+- Choose **Disable Remote / Stock Input** from the tray, click **Disable now / stock input** in **Debug → Remote**, or hold the remote's **Home + Back** buttons for three seconds, to create the immediate disable marker. Outputs are disconnected and held actions are released. In `owned` mode, “stock input” means the default RunLights profile; restoring the receiver's original hardware behavior requires the driver rollback documented in `drivers/g20s-mi02/README.md`.
 - The output device is connected only while a configured target executable is the foreground app and is disconnected on focus loss, bridge shutdown, or RunLights shutdown.
-- Set `remote_bridge.enabled = false` to stop the companion. To remove the feature completely, stop RunLights and delete the `[remote_bridge]` section plus `.runlights` (logs/status only). No drivers or services are installed by RunLights.
+- Set `remote_bridge.enabled = false` to stop the companion. To remove the feature completely, first roll MI_02 back to Microsoft `input.inf` if ownership was installed, then stop RunLights and delete the `[remote_bridge]` section plus `.runlights` (logs/status only). No driver or service is installed merely by enabling the bridge.
 - If an optional third-party virtual-device stack was installed separately, remove it with that product's installer; deleting RunLights does not remove system drivers.
 
 #### Manual verification checklist

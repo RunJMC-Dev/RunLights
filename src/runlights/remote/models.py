@@ -13,6 +13,7 @@ class DeviceDefinition:
     vid: int
     pid: int
     path_contains: str = ""
+    interface_guid: str = "{7E3D4E85-3AF6-4D82-A5D4-9B44C848E718}"
 
     def matches(self, device_path: str) -> bool:
         path = device_path.upper()
@@ -29,6 +30,7 @@ class AppProfile:
     executables: tuple[str, ...]
     bindings: dict[str, str]
     backend: str = "diagnostic"
+    default: bool = False
 
     def matches_executable(self, executable: str | None) -> bool:
         if not executable:
@@ -59,6 +61,7 @@ class RemoteBridgeConfig:
     enabled: bool = False
     device_id: str = "g20s"
     backend: str = "diagnostic"
+    input_mode: str = "observe"
     repeat_delay_ms: int = 425
     repeat_interval_ms: int = 90
     escape_hold_seconds: float = 3.0

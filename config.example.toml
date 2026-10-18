@@ -20,6 +20,7 @@ log_to_notifications = false
 enabled = false
 device_id = "g20s"
 backend = "diagnostic"
+input_mode = "observe"       # change to "owned" only after the signed MI_02 binding exists
 repeat_delay_ms = 425
 repeat_interval_ms = 90
 escape_hold_seconds = 3.0
@@ -28,6 +29,8 @@ escape_hold_seconds = 3.0
   id = "g20s"
   vid = 0x4842
   pid = 0x0001
+  path_contains = "MI_02"
+  interface_guid = "{7E3D4E85-3AF6-4D82-A5D4-9B44C848E718}"
 
   [[remote_bridge.profiles]]
   id = "stremio"

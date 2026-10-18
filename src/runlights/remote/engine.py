@@ -11,6 +11,7 @@ from .backends import DiagnosticBackend, OutputBackend, create_backend
 from .key_state import KeyStateTracker
 from .models import AppProfile, InputEvent, RemoteBridgeConfig
 from .win32_raw_input import RawInputListener, enumerate_devices, foreground_executable
+from .winusb_input import WinUsbInputListener
 
 
 class RemoteBridgeEngine:
@@ -37,6 +38,7 @@ class RemoteBridgeEngine:
         self._last_foreground: str | None = None
         self._escape_pressed: dict[str, float] = {}
         self._disabled_logged = False
+        self._input_lock = threading.RLock()
 
     def run(self) -> None:
         self.state_dir.mkdir(parents=True, exist_ok=True)
@@ -56,13 +58,22 @@ class RemoteBridgeEngine:
             ]
         except Exception as exc:
             self.log(f"vendor HID discovery unavailable: {exc}")
-        listener = RawInputListener(
-            self.handle_input,
-            self.tick,
-            self.stop_event,
-            self.log,
-            tuple(extra_usages),
-        )
+        if self.config.input_mode == "owned":
+            listener = WinUsbInputListener(
+                self.device,
+                self.handle_input,
+                self.tick,
+                self.stop_event,
+                self.log,
+            )
+        else:
+            listener = RawInputListener(
+                self.handle_input,
+                self.tick,
+                self.stop_event,
+                self.log,
+                tuple(extra_usages),
+            )
         try:
             listener.run()
         finally:
@@ -70,6 +81,10 @@ class RemoteBridgeEngine:
             self._write_status("stopped")
 
     def handle_input(self, event: InputEvent) -> None:
+        with self._input_lock:
+            self._handle_input(event)
+
+    def _handle_input(self, event: InputEvent) -> None:
         if self.device is None or not self.device.matches(event.device_path):
             return
         state = "down" if event.pressed else "up"
@@ -116,7 +131,7 @@ class RemoteBridgeEngine:
             if not self._disabled_logged:
                 self.log("bridge disabled by stock-input escape")
                 self._disabled_logged = True
-            self.activator.update(None)
+            self.activator.deactivate()
             self._write_status("disabled")
             return
         self._disabled_logged = False
@@ -125,7 +140,7 @@ class RemoteBridgeEngine:
             if now - held_since >= self.config.escape_hold_seconds:
                 self.disable_file.touch(exist_ok=True)
                 self.log("Home+Back escape held; bridge disabled immediately")
-                self.activator.update(None)
+                self.activator.deactivate()
                 self._write_status("disabled")
                 return
 
@@ -146,6 +161,11 @@ class RemoteBridgeEngine:
             return
         self.log(f"profile active id={profile.id}")
         backend_name = profile.backend or self.config.backend
+        if backend_name == "sendinput" and self.config.input_mode != "owned":
+            self.log(
+                "key output refused: input_mode must be 'owned' so observed HID input is not duplicated"
+            )
+            backend_name = "diagnostic"
         try:
             backend = create_backend(backend_name, self.log)
             backend.connect()

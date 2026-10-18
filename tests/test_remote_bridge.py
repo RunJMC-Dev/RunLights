@@ -6,10 +6,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from runlights.remote.activation import ProfileActivator
+from runlights.remote.backends import SendInputBackend
 from runlights.remote.config import DEFAULT_BINDINGS, load_remote_bridge_config
 from runlights.remote.engine import RemoteBridgeEngine
 from runlights.remote.key_state import KeyStateTracker
 from runlights.remote.models import ActionEvent, AppProfile, DeviceDefinition, RemoteBridgeConfig
+from runlights.remote.winusb_input import HidPacketDecoder
 
 
 class DeviceFilteringTests(unittest.TestCase):
@@ -25,6 +27,26 @@ class DeviceFilteringTests(unittest.TestCase):
         self.assertFalse(keyboard.matches(r"HID#VID_4842&PID_0001&MI_03"))
 
 
+class OwnedInputDecoderTests(unittest.TestCase):
+    def test_decodes_navigation_without_accepting_text_keys(self):
+        decoder = HidPacketDecoder()
+        path = r"\\?\usb#vid_4842&pid_0001&mi_02#owned"
+        # Boot keyboard layout: modifiers, reserved, six HID usages.
+        events = decoder.decode(0x81, bytes([0, 0, 0x52, 0x04, 0, 0, 0, 0]), path, 1.0)
+        self.assertEqual([("up", True)], [(event.control, event.pressed) for event in events])
+        events = decoder.decode(0x81, bytes(8), path, 1.1)
+        self.assertEqual([("up", False)], [(event.control, event.pressed) for event in events])
+
+    def test_decodes_consumer_press_and_release(self):
+        decoder = HidPacketDecoder()
+        path = r"\\?\usb#vid_4842&pid_0001&mi_02#owned"
+        events = decoder.decode(0x82, bytes([3, 0x41, 0x00]), path, 1.0)
+        self.assertEqual("consumer_0041", events[0].control)
+        self.assertTrue(events[0].pressed)
+        events = decoder.decode(0x82, bytes([3, 0, 0]), path, 1.1)
+        self.assertFalse(events[0].pressed)
+
+
 class ForegroundProfileTests(unittest.TestCase):
     def test_activates_only_matching_foreground_executable(self):
         changes = []
@@ -35,6 +57,34 @@ class ForegroundProfileTests(unittest.TestCase):
         self.assertEqual(stremio, activator.update("STREMIO-SHELL-NG.EXE"))
         self.assertIsNone(activator.update("game.exe"))
         self.assertEqual([stremio, None], changes)
+
+    def test_specific_profile_overrides_default_profile(self):
+        changes = []
+        fallback = AppProfile("stock", (), {}, "sendinput", True)
+        stremio = AppProfile("stremio", ("stremio-shell-ng.exe",), {})
+        activator = ProfileActivator([fallback, stremio], changes.append)
+        self.assertEqual(fallback, activator.update("explorer.exe"))
+        self.assertEqual(stremio, activator.update("stremio-shell-ng.exe"))
+        self.assertEqual(fallback, activator.update("notepad.exe"))
+
+    def test_emergency_deactivate_overrides_default_profile(self):
+        changes = []
+        fallback = AppProfile("stock", (), {}, "sendinput", True)
+        activator = ProfileActivator([fallback], changes.append)
+        self.assertEqual(fallback, activator.update("explorer.exe"))
+        activator.deactivate()
+        self.assertIsNone(activator.active)
+        self.assertEqual([fallback, None], changes)
+
+
+class SendInputMappingTests(unittest.TestCase):
+    def test_key_actions_are_data_driven_and_support_chords(self):
+        self.assertEqual((0x28,), SendInputBackend._keys_for_action("key_down"))
+        self.assertEqual((0x10, 0x09), SendInputBackend._keys_for_action("key_shift+tab"))
+        self.assertEqual((0xAF,), SendInputBackend._keys_for_action("key_volume_up"))
+        self.assertEqual((0x11, ord("L")), SendInputBackend._keys_for_action("key_ctrl+l"))
+        self.assertEqual((0x7B,), SendInputBackend._keys_for_action("key_f12"))
+        self.assertIsNone(SendInputBackend._keys_for_action("button_a"))
 
 
 class KeyStateTests(unittest.TestCase):
@@ -119,6 +169,7 @@ class CleanupTests(unittest.TestCase):
     def test_default_config_is_safe_and_data_driven(self):
         config = load_remote_bridge_config({"remote_bridge": {"enabled": True}})
         self.assertEqual("diagnostic", config.backend)
+        self.assertEqual("observe", config.input_mode)
         self.assertEqual(0x4842, config.selected_device().vid)
         self.assertEqual("stremio", config.profiles[0].id)
         self.assertEqual("button_a", config.profiles[0].bindings["consumer_0041"])

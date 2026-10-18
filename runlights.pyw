@@ -2215,6 +2215,13 @@ def _run_debug_window(
             form.addRow("Remote bridge", enabled_cb)
             device_id = QtWidgets.QLineEdit(current.device_id)
             form.addRow("Device definition", device_id)
+            input_mode_combo = QtWidgets.QComboBox()
+            input_mode_combo.addItem("Observe existing HID input (safe)", "observe")
+            input_mode_combo.addItem("Own MI_02 through WinUSB", "owned")
+            input_mode_combo.setCurrentIndex(
+                max(0, input_mode_combo.findData(current.input_mode))
+            )
+            form.addRow("Input mode", input_mode_combo)
             selected = current.selected_device()
             vid_edit = QtWidgets.QLineEdit(f"0x{selected.vid:04X}" if selected else "0x4842")
             pid_edit = QtWidgets.QLineEdit(f"0x{selected.pid:04X}" if selected else "0x0001")
@@ -2226,14 +2233,15 @@ def _run_debug_window(
             form.addRow("Physical receiver", id_row)
             backend_combo = QtWidgets.QComboBox()
             backend_combo.addItem("Diagnostic only (safe)", "diagnostic")
+            backend_combo.addItem("Configured Windows keys", "sendinput")
             backend_combo.addItem("ViGEm/vgamepad (legacy, if already installed)", "vgamepad")
             backend_combo.setCurrentIndex(max(0, backend_combo.findData(current.backend)))
             form.addRow("Output backend", backend_combo)
             layout.addLayout(form)
 
             warning = QtWidgets.QLabel(
-                "The bridge reads only the selected VID/PID and activates the Stremio profile only "
-                "while stremio-shell-ng.exe is foreground. Diagnostic mode never injects or blocks input."
+                "Observe mode reads only the selected VID/PID and never suppresses input. Owned mode "
+                "requires the exact MI_02 WinUSB binding and is refused until that interface is present."
             )
             warning.setWordWrap(True)
             layout.addWidget(warning)
@@ -2338,12 +2346,36 @@ def _run_debug_window(
                     "enabled": enabled_cb.isChecked(),
                     "device_id": device_id.text().strip() or "g20s",
                     "backend": backend_combo.currentData(),
+                    "input_mode": input_mode_combo.currentData(),
                     "vid": vid,
                     "pid": pid,
                     "repeat_delay_ms": current.repeat_delay_ms,
                     "repeat_interval_ms": current.repeat_interval_ms,
                     "escape_hold_seconds": current.escape_hold_seconds,
                 }
+                if settings["input_mode"] == "owned":
+                    try:
+                        from runlights.remote.winusb_input import enumerate_winusb_paths
+
+                        paths = [
+                            path
+                            for path in enumerate_winusb_paths(
+                                selected.interface_guid if selected else
+                                "{7E3D4E85-3AF6-4D82-A5D4-9B44C848E718}"
+                            )
+                            if f"VID_{vid:04X}" in path.upper()
+                            and f"PID_{pid:04X}" in path.upper()
+                        ]
+                    except Exception:
+                        paths = []
+                    if len(paths) != 1:
+                        QtWidgets.QMessageBox.warning(
+                            dialog,
+                            "Remote Bridge",
+                            "Owned mode requires exactly one matching RunLights WinUSB MI_02 "
+                            "interface. No settings were changed.",
+                        )
+                        return
                 if _upsert_remote_bridge_in_config(CONFIG_PATH, settings, self.append_line):
                     new_cfg = _reload_config(self.append_line)
                     self.append_line(
@@ -3312,6 +3344,7 @@ def _render_remote_bridge_block(settings: dict) -> list[str]:
     lines.append(f"enabled = {str(bool(settings.get('enabled', False))).lower()}")
     lines.append(f"device_id = \"{_toml_escape(str(settings.get('device_id', 'g20s')))}\"")
     lines.append(f"backend = \"{_toml_escape(str(settings.get('backend', 'diagnostic')))}\"")
+    lines.append(f"input_mode = \"{_toml_escape(str(settings.get('input_mode', 'observe')))}\"")
     lines.append(f"repeat_delay_ms = {int(settings.get('repeat_delay_ms', 425))}")
     lines.append(f"repeat_interval_ms = {int(settings.get('repeat_interval_ms', 90))}")
     lines.append(f"escape_hold_seconds = {float(settings.get('escape_hold_seconds', 3.0))}")
@@ -3320,6 +3353,8 @@ def _render_remote_bridge_block(settings: dict) -> list[str]:
     lines.append(f"id = \"{_toml_escape(str(settings.get('device_id', 'g20s')))}\"")
     lines.append(f"vid = 0x{int(settings.get('vid', 0x4842)):04X}")
     lines.append(f"pid = 0x{int(settings.get('pid', 0x0001)):04X}")
+    lines.append('path_contains = "MI_02"')
+    lines.append('interface_guid = "{7E3D4E85-3AF6-4D82-A5D4-9B44C848E718}"')
     lines.append("")
     return lines
 

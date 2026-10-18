@@ -1,0 +1,37 @@
+; RunLights device-specific ownership package.
+; This exact hardware ID targets only interface MI_02. It does not bind the
+; receiver's mouse (MI_03), vendor HID (MI_04), audio, or any other keyboard.
+; The package must receive a valid catalog signature before Windows will load it.
+
+[Version]
+Signature = "$Windows NT$"
+Class = USBDevice
+ClassGuid = {88BAE032-5A81-49F0-BC3D-A4FF138216D6}
+Provider = %ProviderName%
+DriverVer = 10/18/2026,1.0.0.0
+CatalogFile = RunLightsG20S.cat
+PnpLockdown = 1
+
+[Manufacturer]
+%ProviderName% = RunLights,NTamd64
+
+[RunLights.NTamd64]
+%DeviceName% = Device_Install, USB\VID_4842&PID_0001&MI_02
+
+[Device_Install]
+Include = winusb.inf
+Needs = WINUSB.NT
+
+[Device_Install.Services]
+Include = winusb.inf
+Needs = WINUSB.NT.Services
+
+[Device_Install.HW]
+AddReg = DeviceInterfaceGUIDs
+
+[DeviceInterfaceGUIDs]
+HKR,,DeviceInterfaceGUIDs,0x00010000,"{7E3D4E85-3AF6-4D82-A5D4-9B44C848E718}"
+
+[Strings]
+ProviderName = "RunLights"
+DeviceName = "RunLights G20S Remote (MI_02)"

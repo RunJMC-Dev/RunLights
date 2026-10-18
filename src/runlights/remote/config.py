@@ -53,6 +53,7 @@ def load_remote_bridge_config(raw: dict) -> RemoteBridgeConfig:
                 _as_int(item.get("vid"), default_device.vid),
                 _as_int(item.get("pid"), default_device.pid),
                 str(item.get("path_contains", "")).strip(),
+                str(item.get("interface_guid", default_device.interface_guid)).strip(),
             )
         )
     if not devices:
@@ -69,7 +70,8 @@ def load_remote_bridge_config(raw: dict) -> RemoteBridgeConfig:
             if str(value).strip()
         )
         if not profile_id or not executables:
-            continue
+            if not profile_id or not bool(item.get("default", False)):
+                continue
         bindings = dict(DEFAULT_BINDINGS)
         bindings.update(
             {
@@ -83,6 +85,7 @@ def load_remote_bridge_config(raw: dict) -> RemoteBridgeConfig:
                 executables,
                 bindings,
                 str(item.get("backend", section.get("backend", "diagnostic"))).casefold(),
+                bool(item.get("default", False)),
             )
         )
     if not profiles:
@@ -99,6 +102,7 @@ def load_remote_bridge_config(raw: dict) -> RemoteBridgeConfig:
         enabled=bool(section.get("enabled", False)),
         device_id=str(section.get("device_id", "g20s")),
         backend=str(section.get("backend", "diagnostic")).casefold(),
+        input_mode=str(section.get("input_mode", "observe")).casefold(),
         repeat_delay_ms=max(0, _as_int(section.get("repeat_delay_ms"), 425)),
         repeat_interval_ms=max(10, _as_int(section.get("repeat_interval_ms"), 90)),
         escape_hold_seconds=max(1.0, _as_float(section.get("escape_hold_seconds"), 3.0)),
