@@ -20,7 +20,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 2. Create/activate a virtual environment.
 3. Install deps: `pip install -r requirements.txt` (pywin32, psutil, requests, pystray, Pillow, PySide6, pytesseract). Requires Tesseract installed on Windows for OCR.
 4. Copy `config.example.toml` to `config.toml` in the app folder and edit.
-5. Launch tray (no console): double-click `runlights.pyw` (or `pythonw runlights.pyw`). It applies the idle state on start and watches configured processes.
+5. Launch tray (no console): double-click `runlights.pyw` (or `pythonw runlights.pyw`). The launcher supports both direct execution and Windows file associations that invoke it through Python's module runner. It applies the idle state on start and watches configured processes.
 
 ## Configuration (TOML)
 - Copy `config.example.toml` to `config.toml` in the app folder (keep it beside the app so it moves with it) and edit.

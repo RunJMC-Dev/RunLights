@@ -20,6 +20,18 @@ CONFIG_PATH = _here / "config.toml"
 os.chdir(_here)
 sys.path.insert(0, str(_here / "src"))
 
+# Python's Windows launcher can execute ``runlights.pyw`` through runpy as a
+# module named ``runlights``. In that mode this launcher shadows the real
+# ``src/runlights`` package, so imports such as ``runlights.tray`` fail unless
+# the launcher is explicitly made a package shim. Direct ``pythonw file.pyw``
+# launches do not need this, but keeping both paths valid makes double-click
+# startup independent of the user's .pyw file association.
+_package_dir = _here / "src" / "runlights"
+_shadow_module = sys.modules.get("runlights")
+if _shadow_module is not None and not hasattr(_shadow_module, "__path__"):
+    _shadow_module.__path__ = [str(_package_dir)]
+    _shadow_module.__package__ = "runlights"
+
 _STARTUP_LOG = _here / "runlights_startup.log"
 
 
