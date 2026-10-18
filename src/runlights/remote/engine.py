@@ -75,6 +75,7 @@ class RemoteBridgeEngine:
                 tuple(extra_usages),
             )
         try:
+            self._write_status("idle")
             listener.run()
         finally:
             self._deactivate()
