@@ -32,6 +32,7 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` for `segmentsolid`.
 - `notification` block controls the `notify` debug overlay (duration seconds, font, fontsize, fontcolour, padding, bodycolour, bodyopacity 0-100, border px, timestamp on/off, align topcenter).
 - `overlays.clock` controls the clock overlay; `show_playtime = true` adds an elapsed play-time line while a watched app is active, resetting when the active app changes and hiding when idle.
+- The application monitor reloads saved game/process lists automatically, including games already running when added. No restart or lighting mode is required for game detection and overlay play time.
 - In Debug → Overlays, the **Rows** input accepts a custom XML-style template with a live preview. Use the example button for a clock, played time and CPU/GPU temperatures. Leave Rows blank to keep the existing clock format and play-time controls. Preview temporarily applies the layout; Cancel restores the saved settings.
 
   ```xml

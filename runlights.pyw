@@ -5018,6 +5018,7 @@ def main() -> int:
                 event_bus,
                 log_message,
                 pause_event=PAUSE_EVENT,
+                config_path=CONFIG_PATH,
             )
         )
         module_manager.add(RemoteBridgeModule(CONFIG_PATH, _here, log_message))

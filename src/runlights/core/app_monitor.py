@@ -3,7 +3,10 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
+
+from runlights.config import load_config
 
 from .events import EventBus
 
@@ -36,22 +39,47 @@ class ApplicationMonitorModule:
         log: Callable[[str], None],
         poll_seconds: float = 0.5,
         pause_event: threading.Event | None = None,
+        config_path: Path | None = None,
     ):
         self._event_bus = event_bus
         self._log = log
         self._poll_seconds = poll_seconds
         self._pause_event = pause_event
-        self._process_to_app: dict[str, str] = {}
+        self._config_path = config_path
+        self._config_mtime_ns: int | None = None
+        self._process_to_app = self._build_process_map(applications)
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    @staticmethod
+    def _build_process_map(applications: list[dict]) -> dict[str, str]:
+        mapping: dict[str, str] = {}
         for app in applications:
             app_id = str(app.get("id", "")).strip()
             for process in app.get("processes", []):
                 if app_id and isinstance(process, str):
-                    self._process_to_app[process.casefold()] = app_id
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+                    mapping[process.strip().casefold()] = app_id
+        return mapping
+
+    def _refresh_applications(self) -> None:
+        if self._config_path is None:
+            return
+        try:
+            mtime = self._config_path.stat().st_mtime_ns
+            if mtime == self._config_mtime_ns:
+                return
+            config = load_config(self._config_path)
+            mapping = self._build_process_map(config.raw.get("application", []))
+            if mapping != self._process_to_app:
+                self._process_to_app = mapping
+                self._log("Application monitor reloaded game list")
+            self._config_mtime_ns = mtime
+        except Exception as exc:
+            # Keep the last valid list, and retry a partial/invalid save next poll.
+            self._log(f"Application monitor config reload failed: {exc}")
 
     def start(self) -> None:
-        if not self._process_to_app or self._thread is not None:
+        if self._thread is not None:
             return
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name=self.name, daemon=True)
@@ -75,6 +103,7 @@ class ApplicationMonitorModule:
         seen: set[str] = set()
         last_foreground: tuple[str | None, str | None] = (None, None)
         while not self._stop.wait(self._poll_seconds):
+            self._refresh_applications()
             if self._pause_event is not None and self._pause_event.is_set():
                 continue
             try:
