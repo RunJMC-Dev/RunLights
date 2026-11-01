@@ -32,6 +32,19 @@ WLED interface for PC applications that can drive multiple WLED instances from a
 - ESDE bindings: map console names to controller/segment pairs under `application.modes."game-select".bindings` for `segmentsolid`.
 - `notification` block controls the `notify` debug overlay (duration seconds, font, fontsize, fontcolour, padding, bodycolour, bodyopacity 0-100, border px, timestamp on/off, align topcenter).
 - `overlays.clock` controls the clock overlay; `show_playtime = true` adds an elapsed play-time line while a watched app is active, resetting when the active app changes and hiding when idle.
+- In Debug → Overlays, the **Rows** input accepts a custom XML-style template with a live preview. Use the example button for a clock, played time and CPU/GPU temperatures. Leave Rows blank to keep the existing clock format and play-time controls. Preview temporarily applies the layout; Cancel restores the saved settings.
+
+  ```xml
+  <row font="Tenorite" size="15">{clock:HH:mm}</row>
+  <row font="Tenorite" size="7">Played: {playtime:HH:mm}</row>
+  <row font="Tenorite" size="7">CPU: {cpu.temp} GPU: {gpu.temp}</row>
+  ```
+
+  Rows support optional `font`, `size` (4–96 points), `color` (`#RRGGBB`) and `align` (`left`, `center`, `right`). Unspecified styles inherit the overlay defaults. Clock and play time accept `HH:mm` or `HH:mm:ss`; play time can exceed 24 hours and its row hides while idle. XML special characters must be escaped (`&amp;`, `&lt;`). The template is saved in `overlays.clock.template`; invalid editor input prevents saving. Existing positioning, dragging and countdown timers remain available.
+
+  Temperatures are read in a background worker approximately every two seconds, using a persistent read-only LibreHardwareMonitor helper, existing LibreHardwareMonitor/OpenHardwareMonitor WMI providers, then `nvidia-smi` for a missing NVIDIA GPU reading. Install LibreHardwareMonitor (or put its portable folder beside `runlights.pyw`); its library is discovered in that folder, PATH, standard Program Files locations and WinGet packages. The monitor GUI need not run for direct library access. CPU access may require running RunLights as administrator and depends on hardware/driver support. No elevation is requested automatically, and no fan settings are changed.
+
+  CPU readings prefer package/Tctl/Tdie sensors, then the hottest CPU sensor; GPU readings use core temperature, not hotspot or memory temperature. With multiple devices, the highest selected temperature is shown. Values include °C; unavailable readings or samples older than ten seconds display `—`. Unavailable providers are retried after approximately one minute. Polling starts when a temperature template is used and continues until RunLights exits. The sensor library is an external dependency and is not bundled.
 - `debug_window` block controls Debug Messages filters (output/input booleans) plus log mirroring (log_to_notifications).
 - `mqtt` block enables Home Assistant notifications over MQTT; it subscribes to a topic and expects JSON with a `message` field (everything else ignored).
 - For `screen_region` inputs, set `interval_ms` on a mode to control OCR refresh rate (default 1000ms).

@@ -82,6 +82,9 @@ CURRENT_APP_ID: str | None = None
 CURRENT_APP_STARTED_AT: float | None = None
 DEBUG_WINDOW_SETTINGS = {"output": True, "input": True, "log_to_notifications": False}
 
+from runlights.temperatures import temperatures
+from runlights.overlay_template import EXAMPLE, parse_template, render_template
+
 from runlights.tray import serve_in_thread  # noqa: E402
 from runlights.ipc import PIPE_NAME  # noqa: E402
 from runlights.config import load_config, ConfigError  # noqa: E402
@@ -2074,6 +2077,20 @@ def _run_debug_window(
             playtime_label = QtWidgets.QLineEdit(str(current.get("playtime_label", "Play")).strip())
             playtime_label.setPlaceholderText("Play")
 
+            template = QtWidgets.QPlainTextEdit(str(current.get("template", "")))
+            template.setPlaceholderText(EXAMPLE)
+            template.setMinimumHeight(110)
+            template_help = QtWidgets.QLabel("Blank uses the clock settings below. Rows support font, size (pt), color and align.")
+            template_help.setWordWrap(True)
+            template_error = QtWidgets.QLabel()
+            template_error.setStyleSheet("color: #d44;")
+            template_error.setWordWrap(True)
+            example_btn = QtWidgets.QPushButton("Use clock + played + temperatures example")
+            example_btn.clicked.connect(lambda: template.setPlainText(EXAMPLE))
+            live_preview = QtWidgets.QLabel()
+            live_preview.setTextFormat(QtCore.Qt.RichText)
+            live_preview.setStyleSheet("background: #222; color: white; padding: 8px;")
+
             font = QtWidgets.QFontComboBox()
             font.setEditable(False)
             font_current = str(current.get("font", "")).strip()
@@ -2105,6 +2122,11 @@ def _run_debug_window(
             align.setCurrentIndex(idx if idx >= 0 else 0)
 
             clock_form.addRow("", enabled_cb)
+            clock_form.addRow("Rows", template)
+            clock_form.addRow("", template_help)
+            clock_form.addRow("", example_btn)
+            clock_form.addRow("Preview", live_preview)
+            clock_form.addRow("", template_error)
             clock_form.addRow("Format", fmt)
             clock_form.addRow("", show_playtime)
             clock_form.addRow("Play time label", playtime_label)
@@ -2131,6 +2153,7 @@ def _run_debug_window(
             def _collect():
                 return {
                     "enabled": bool(enabled_cb.isChecked()),
+                    "template": template.toPlainText().strip(),
                     "format": fmt.text().strip() or "%H:%M:%S",
                     "show_playtime": bool(show_playtime.isChecked()),
                     "playtime_label": playtime_label.text().strip(),
@@ -2144,13 +2167,45 @@ def _run_debug_window(
                     "align": align.currentText().strip() or "topright",
                 }
 
+            def _validate_template():
+                text = template.toPlainText().strip()
+                try:
+                    rows = parse_template(text) if text else None
+                    template_error.setText("")
+                    preview_btn.setEnabled(True)
+                    save_btn.setEnabled(True)
+                    if rows is not None:
+                        if "{cpu.temp}" in text or "{gpu.temp}" in text:
+                            temperatures.start()
+                        elapsed = None if CURRENT_APP_STARTED_AT is None else time.monotonic() - CURRENT_APP_STARTED_AT
+                        live_preview.setText(render_template(rows, temperatures.snapshot(), elapsed))
+                    else:
+                        live_preview.setText("Use Preview to show the standard clock.")
+                    return True
+                except ValueError as exc:
+                    template_error.setText(str(exc))
+                    preview_btn.setEnabled(False)
+                    save_btn.setEnabled(False)
+                    return False
+
+            template.textChanged.connect(_validate_template)
+            preview_timer = QtCore.QTimer(dialog)
+            preview_timer.setInterval(1000)
+            preview_timer.timeout.connect(_validate_template)
+            preview_timer.start()
+            _validate_template()
+
             def _on_preview():
+                if not _validate_template():
+                    return
                 s = _collect()
                 preview_cfg = dict(cfg_raw_global or {})
                 preview_cfg["overlays"] = {**(preview_cfg.get("overlays") or {}), "clock": {**s, "enabled": True}}
                 _apply_clock_overlay_config(preview_cfg)
 
             def _on_save():
+                if not _validate_template():
+                    return
                 settings = _collect()
                 ok = _upsert_clock_overlay_in_config(CONFIG_PATH, settings, self.append_line)
                 if ok:
@@ -2164,6 +2219,8 @@ def _run_debug_window(
             cancel_btn.clicked.connect(lambda _=None: dialog.reject())
 
             dialog.exec()
+            preview_timer.stop()
+            _apply_clock_overlay_config(cfg_raw_global)
 
         def _show_settings_dialog(self):
             dialog = QtWidgets.QDialog(self)
@@ -2865,6 +2922,7 @@ def _read_clock_overlay_config(cfg_raw: dict | None) -> dict:
         body_color = (0, 0, 0)
     return {
         "enabled": bool(cfg.get("enabled", False)),
+        "template": str(cfg.get("template", "")).strip(),
         "format": str(cfg.get("format", "%H:%M:%S")).strip() or "%H:%M:%S",
         "show_playtime": bool(cfg.get("show_playtime", True)),
         "playtime_label": str(cfg.get("playtime_label", "Play")).strip(),
@@ -2926,6 +2984,7 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             )
             layout.addWidget(self.label)
 
+            self._rows = None
             self._fmt = "%H:%M:%S"
             self._show_playtime = True
             self._playtime_label = "Play"
@@ -2960,7 +3019,13 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
                 self._apply_label_style(flash_red=self._timer_flash_on)
             else:
                 self._apply_label_style(flash_red=False)
-            self.label.setText("\n".join(lines))
+            if self._rows is not None:
+                elapsed = None if CURRENT_APP_STARTED_AT is None else time.monotonic() - CURRENT_APP_STARTED_AT
+                self.label.setTextFormat(QtCore.Qt.RichText)
+                self.label.setText(render_template(self._rows, temperatures.snapshot(), elapsed, alarm=self._timer_deadline is not None))
+            else:
+                self.label.setTextFormat(QtCore.Qt.PlainText)
+                self.label.setText("\n".join(lines))
             self._update_tooltip()
             self.label.adjustSize()
             self.adjustSize()
@@ -3099,6 +3164,14 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             self.move(x, y)
 
         def start_clock(self, settings: dict):
+            template_text = settings.get("template", "")
+            try:
+                self._rows = parse_template(template_text) if template_text else None
+            except ValueError:
+                logging.warning("Invalid overlay template; using standard clock", exc_info=True)
+                self._rows = None
+            if self._rows is not None and ("{cpu.temp}" in template_text or "{gpu.temp}" in template_text):
+                temperatures.start()
             self._fmt = settings.get("format", "%H:%M:%S") or "%H:%M:%S"
             self._show_playtime = bool(settings.get("show_playtime", True))
             self._playtime_label = str(settings.get("playtime_label", "Play") or "").strip()
@@ -3486,6 +3559,7 @@ def _render_overlays_clock_block(settings: dict) -> list[str]:
             return default
 
     lines = ["", "[overlays.clock]"]
+    lines.append("template = " + json.dumps(str(settings.get("template", "")), ensure_ascii=False))
     lines.append(f"enabled = {str(bool(settings.get('enabled', False))).lower()}")
     lines.append(f"format = \"{_toml_escape(str(settings.get('format', '%H:%M:%S')).strip() or '%H:%M:%S')}\"")
     lines.append(f"show_playtime = {str(bool(settings.get('show_playtime', True))).lower()}")
