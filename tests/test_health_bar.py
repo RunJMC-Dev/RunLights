@@ -7,7 +7,7 @@ class HealthBarTests(unittest.TestCase):
         im = Image.new("RGB", (296, 26), (20, 20, 20))
         d = ImageDraw.Draw(im)
         for x in (2, 292):
-            d.point((x, 2), fill=(220, 220, 220))
+            d.point((x, 2), fill=(120, 120, 120))
         width = round(284 * percent / 100)
         if width:
             d.rectangle((6, 9, 5 + width, 17), fill=(185, 190, 196))

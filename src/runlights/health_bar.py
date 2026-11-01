@@ -11,7 +11,7 @@ def read_health_bar(image):
         return None
     rgb = image.convert("RGB")
     def bright(x, y):
-        return min(rgb.getpixel((x, y))) > 140
+        return min(rgb.getpixel((x, y))) > 100
     # Two light corner ticks plus dark gutters distinguish the HUD from menus.
     if not all(any(bright(x, y) for y in (1, 2, 3)) for x in (2, 292)):
         return None
