@@ -4473,11 +4473,24 @@ def _perform_ocr(
     """Capture screen region and run OCR. Returns (text, error, image?)."""
     if mode and mode.get("reader") == "once_human_bar":
         from runlights.health_bar import read_health_bar
-        if (ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)) != (1920, 1080):
-            return None, None, None
-        img, err = _capture_region(region)
+        # Match physical capture coordinates, independently of Qt/thread DPI context.
+        from PIL import Image
+        previous_dpi = ctypes.windll.user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))
+        try:
+            sw = ctypes.windll.user32.GetSystemMetrics(0)
+            sh = ctypes.windll.user32.GetSystemMetrics(1)
+            if abs(sw / sh - 1920 / 1080) > .01:
+                return None, None, None
+            x, y, width, height = region
+            scaled = (round(x * sw / 1920), round(y * sh / 1080),
+                      round(width * sw / 1920), round(height * sh / 1080))
+            img, err = _capture_region(scaled)
+        finally:
+            if previous_dpi:
+                ctypes.windll.user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(previous_dpi))
         if err:
             return None, err, None
+        img = img.resize((region[2], region[3]), Image.Resampling.BOX)
         value = read_health_bar(img)
         return (str(value) if value is not None else None), None, (img if include_image else None)
     if pytesseract is None:
