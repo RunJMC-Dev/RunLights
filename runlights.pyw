@@ -2498,8 +2498,8 @@ def _run_debug_window(
             self._log_history.append(entry)
             self._render_log_entry(entry)
 
-        def append_line(self, line: str, preformatted: bool = False):
-            entry = _build_log_entry(line)
+        def append_line(self, line: str, preformatted: bool = False, *, msg_class=None, msg_id=None):
+            entry = _build_log_entry(line, msg_class=msg_class, msg_id=msg_id)
             self.append_entry(entry)
 
         def _set_log_to_notifications(self, enabled: bool):
@@ -3750,8 +3750,8 @@ def _apply_ocr_delimiter(mode: dict, text: str, log_message=None) -> str:
 
 def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
     log_message_raw = log_message
-    def log_output(msg: str):
-        _log_output(log_message_raw, msg)
+    def log_output(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "OUTPUT", **metadata})
     log_message = log_output
     output_type = mode.get("output")
     if output_type == "fullfade":
@@ -4110,8 +4110,8 @@ def _apply_output(mode: dict, cfg_raw: dict, value: float, log_message):
 
 def _apply_segmentsolid_base(mode: dict, cfg_raw: dict, log_message):
     log_message_raw = log_message
-    def log_output(msg: str):
-        _log_output(log_message_raw, msg)
+    def log_output(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "OUTPUT", **metadata})
     log_message = log_output
     bindings = mode.get("bindings", {})
     controllers_filter = mode.get("controllers", [])
@@ -4159,8 +4159,8 @@ def _apply_segmentsolid_base(mode: dict, cfg_raw: dict, log_message):
 
 def _apply_preset(controller_id: str, preset: str, cfg_raw: dict, log_message):
     log_message_raw = log_message
-    def log_output(msg: str):
-        _log_output(log_message_raw, msg)
+    def log_output(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "OUTPUT", **metadata})
     log_message = log_output
     ctrl_entry = _lookup_controller_insensitive(cfg_raw, controller_id)
     if not ctrl_entry:
@@ -4184,8 +4184,8 @@ def _apply_preset(controller_id: str, preset: str, cfg_raw: dict, log_message):
 def _log_current_preset(controller_id: str, cfg_raw: dict, log_message):
     """Fetch and log the current preset (id and name if available) for a controller."""
     log_message_raw = log_message
-    def log_output(msg: str):
-        _log_output(log_message_raw, msg)
+    def log_output(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "OUTPUT", **metadata})
     log_message = log_output
     ctrl_entry = _lookup_controller_insensitive(cfg_raw, controller_id)
     if not ctrl_entry:
@@ -4222,8 +4222,8 @@ def _log_current_preset(controller_id: str, cfg_raw: dict, log_message):
 
 def _apply_gaming_preset(cfg_raw: dict, preset_name: str, log_message):
     log_message_raw = log_message
-    def log_output(msg: str):
-        _log_output(log_message_raw, msg)
+    def log_output(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "OUTPUT", **metadata})
     log_message = log_output
     transition_ms = cfg_raw.get("default_transition_ms")
     for ctrl_entry in cfg_raw.get("controllers", []):
@@ -4241,8 +4241,8 @@ def _apply_gaming_preset(cfg_raw: dict, preset_name: str, log_message):
 
 def _apply_idle_preset(cfg_raw: dict, log_message):
     log_message_raw = log_message
-    def log_output(msg: str):
-        _log_output(log_message_raw, msg)
+    def log_output(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "OUTPUT", **metadata})
     log_message = log_output
     transition_ms = cfg_raw.get("default_transition_ms")
     applied = 0
@@ -4270,8 +4270,8 @@ def _apply_idle_preset(cfg_raw: dict, log_message):
 
 def _apply_idle(cfg_raw: dict, log_message):
     log_message_raw = log_message
-    def log_output(msg: str):
-        _log_output(log_message_raw, msg)
+    def log_output(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "OUTPUT", **metadata})
     log_message = log_output
     idle_cfg = cfg_raw.get("idle")
     if not idle_cfg:
@@ -4407,8 +4407,8 @@ def _apply_input_range(mode: dict, value: float | None, log_message=None) -> flo
     """Normalize input to 0-100 when inputrangemin/max are set."""
     if log_message:
         log_message_raw = log_message
-        def log_input(msg: str):
-            _log_input(log_message_raw, msg)
+        def log_input(msg: str, **metadata):
+            log_message_raw(msg, **{"msg_class": "INPUT", **metadata})
         log_message = log_input
     if value is None:
         return None
@@ -4681,8 +4681,8 @@ def _ingame_match_color(img, target: tuple[int, int, int], tol: int, min_percent
 
 def _ingame_check(entry: dict, now: float, log_message) -> bool:
     log_message_raw = log_message
-    def log_input(msg: str):
-        _log_input(log_message_raw, msg)
+    def log_input(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "INPUT", **metadata})
     log_message = log_input
     ingame = entry.get("ingame")
     if not ingame:
@@ -4792,8 +4792,8 @@ def _ocr_poll_loop(
     ocr_fail_queue: "queue.Queue[tuple[str, str]] | None" = None,
 ):
     log_message_raw = log_message
-    def log_input(msg: str):
-        _log_input(log_message_raw, msg)
+    def log_input(msg: str, **metadata):
+        log_message_raw(msg, **{"msg_class": "INPUT", **metadata})
     log_message = log_input
     entries = _collect_ocr_modes(cfg_raw)
     if not entries:

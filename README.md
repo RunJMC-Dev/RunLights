@@ -258,3 +258,5 @@ The Once Human example uses `input = "screen_region"` with `reader = "once_human
 Calibration uses a 1920×1080 reference for the default gameplay HUD: x=812, y=1030, width=296, height=26. Capture coordinates scale to the physical 16:9 display resolution (including 3840×2160 with Windows scaling), then normalize the crop to the reference size. Other aspect ratios are ignored; custom HUD scales and layouts require recalibration. Menus are rejected using the bar frame and gutters; foreground detection fails closed. Health is measured against the full original bar width, so sanity-reduced capacity counts as unavailable health; no separate sanity value is inferred. The saved gameplay reference was used for offline validation; damage/healing and menu transitions still need live verification. Restart RunLights after changing this profile.
 
 The frame detector tolerates dim antialiased corner ticks in physical-resolution captures.
+
+Input/output logging callbacks preserve message categories through nested handlers, preventing lighting polling and Debug test controls from failing on `msg_class` metadata.
