@@ -250,3 +250,9 @@ Outputs
 
 ## License
 TBD.
+
+### Once Human health lighting
+
+The Once Human example uses `input = "screen_region"` with `reader = "once_human_bar"`. It reads the white health fill directly, without Tesseract, and drives the two side shelves from dim white at full health toward red, flashing below 20%. It samples every 500 ms only while the game is foreground. Unrecognized HUD crops are ignored and leave the last lighting state unchanged.
+
+Calibration is for the default 1920×1080 gameplay HUD: x=812, y=1030, width=296, height=26. Other resolutions, HUD scales and layouts require recalibration. Menus are rejected using the bar frame and gutters; foreground detection fails closed. Health is measured against the full original bar width, so sanity-reduced capacity counts as unavailable health; no separate sanity value is inferred. The saved gameplay reference was used for offline validation; damage/healing and menu transitions still need live verification. Restart RunLights after changing this profile.

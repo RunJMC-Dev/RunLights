@@ -395,3 +395,25 @@ processes = ["DOOMTheDarkAges.exe"]
   dangertype = "flash"
   dangerthreshold = 20.0
 
+
+[[application]]
+id = "OnceHuman"
+friendlyname = "Once Human"
+processes = ["ONCE_HUMAN.exe"]
+  [[application.modes]]
+  id = "health"
+  input = "screen_region"
+  reader = "once_human_bar"
+  output = "crossfade"
+  x = 812
+  y = 1030
+  width = 296
+  height = 26
+  interval_ms = 500
+  controllers = ["PCROOMLHS", "PCROOMRHS"]
+  acolor = "#ff0000"
+  abrightness = 255
+  bcolor = "#ffffff"
+  bbrightness = 35
+  dangertype = "flash"
+  dangerthreshold = 20.0

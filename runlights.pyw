@@ -4471,6 +4471,15 @@ def _perform_ocr(
     mode: dict | None = None,
 ):
     """Capture screen region and run OCR. Returns (text, error, image?)."""
+    if mode and mode.get("reader") == "once_human_bar":
+        from runlights.health_bar import read_health_bar
+        if (ctypes.windll.user32.GetSystemMetrics(0), ctypes.windll.user32.GetSystemMetrics(1)) != (1920, 1080):
+            return None, None, None
+        img, err = _capture_region(region)
+        if err:
+            return None, err, None
+        value = read_health_bar(img)
+        return (str(value) if value is not None else None), None, (img if include_image else None)
     if pytesseract is None:
         return None, "pytesseract not available", None
     try:
@@ -4799,9 +4808,14 @@ def _ocr_poll_loop(
             for entry in entries:
                 if not _process_running(entry["processes"]):
                     continue
+                is_bar = entry["mode"].get("reader") == "once_human_bar"
+                if is_bar and (not win32gui or not win32process):
+                    continue
                 if win32gui and win32process:
                     try:
                         hwnd = win32gui.GetForegroundWindow()
+                        if is_bar and not hwnd:
+                            continue
                         if hwnd:
                             _, pid = win32process.GetWindowThreadProcessId(hwnd)
                             proc_name = (psutil.Process(pid).name() or "").lower()
@@ -4809,7 +4823,8 @@ def _ocr_poll_loop(
                             if fg_app != entry["app_id"]:
                                 continue
                     except Exception:
-                        pass
+                        if is_bar:
+                            continue
                 if not _ingame_check(entry, now, log_message):
                     continue
                 if now < entry["next"]:
@@ -4830,10 +4845,11 @@ def _ocr_poll_loop(
                 text = _apply_ocr_delimiter(entry["mode"], text, log_message)
                 if not text:
                     continue
-                if text == entry["last_text"]:
+                if text == entry["last_text"] and not is_bar:
                     continue
+                if text != entry["last_text"]:
+                    log_message(f"Input {entry['app_id']}.{entry['mode_id']}: '{text}'")
                 entry["last_text"] = text
-                log_message(f"OCR {entry['app_id']}.{entry['mode_id']}: '{text}'")
                 val = text
                 if entry["mode"].get("output") != "segmentsolid":
                     num = _extract_number(text)
