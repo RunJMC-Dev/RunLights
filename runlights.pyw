@@ -84,6 +84,7 @@ DEBUG_WINDOW_SETTINGS = {"output": True, "input": True, "log_to_notifications": 
 
 from runlights.temperatures import temperatures
 from runlights.overlay_template import EXAMPLE, parse_template, render_template
+from runlights.overlay_window import keep_above_foreground
 
 from runlights.tray import serve_in_thread  # noqa: E402
 from runlights.ipc import PIPE_NAME  # noqa: E402
@@ -3031,6 +3032,11 @@ def _ensure_clock_overlay() -> _ClockOverlayState | None:
             self.adjustSize()
             if not self._manual_position:
                 self.position_on_screen(self._align)
+            if self.isVisible():
+                try:
+                    keep_above_foreground(int(self.winId()))
+                except Exception:
+                    logging.debug("Could not restore clock overlay stacking", exc_info=True)
 
         def _update_timer_state(self):
             if self._timer_deadline is None:

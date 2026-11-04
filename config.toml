@@ -417,3 +417,8 @@ processes = ["ONCE_HUMAN.exe"]
   bbrightness = 35
   dangertype = "flash"
   dangerthreshold = 20.0
+
+[[application]]
+id = "nicedayforfishing"
+friendlyname = "Nice Day for Fishing"
+processes = ["NiceDayForFishing.exe"]
