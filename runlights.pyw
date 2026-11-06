@@ -1430,6 +1430,9 @@ def _run_debug_window(
 
                 def _collect_mode_for_test():
                     result = {"id": mode_id.text().strip() or "test"}
+                    for key in ("reader", "interval_ms", "inputrangeclamp"):
+                        if key in (existing or {}):
+                            result[key] = existing[key]
                     input_sel = input_mode.currentText()
                     output_sel = output_mode.currentText()
                     if input_sel != "None":
@@ -1562,6 +1565,9 @@ def _run_debug_window(
                         status.setVisible(True)
                         return
                     result = {"id": mid}
+                    for key in ("reader", "interval_ms", "inputrangeclamp"):
+                        if key in (existing or {}):
+                            result[key] = existing[key]
                     input_sel = input_mode.currentText()
                     output_sel = output_mode.currentText()
                     if input_sel != "None":
@@ -4429,6 +4435,8 @@ def _apply_input_range(mode: dict, value: float | None, log_message=None) -> flo
             if log_message:
                 log_message("Invalid input range: inputrangemax <= inputrangemin")
             return None
+        if mode.get("inputrangeclamp", False):
+            value = max(min_f, min(max_f, value))
         if value < min_f or value > max_f:
             if log_message:
                 log_message(f"Value {value} outside input range [{min_f}, {max_f}]")
